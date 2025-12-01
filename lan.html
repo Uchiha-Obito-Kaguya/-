@@ -2,31 +2,35 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>DeepSpace: Nexus</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSpace</title>
     
-    <!-- 允许跨域加载资源 -->
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
 
     <style>
         /* --- 0. 全局设置 --- */
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { 
-            margin: 0; background: #020202; overflow: hidden; 
-            font-family: -apple-system, "SF Pro Display", "PingFang SC", sans-serif; 
+            margin: 0; background: #000000; overflow: hidden; 
+            font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; 
             color: #fff; user-select: none;
         }
         canvas { display: block; }
-        #input_video { display: none; }
+        
+        #input_video { 
+            position: absolute; top: 0; left: 0; 
+            width: 1px; height: 1px; opacity: 0; pointer-events: none; z-index: -1; 
+        }
 
-        /* --- 1. 入场动画 (英文 - 保持逼格) --- */
+        /* --- 1. 入场动画 --- */
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; z-index: 9999;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            transition: opacity 0.8s ease; pointer-events: none;
+            transition: opacity 0.5s ease;
         }
-        #loader.done { opacity: 0; }
+        #loader.done { opacity: 0; pointer-events: none; }
+        
         .loader-text { 
             font-size: 14px; letter-spacing: 6px; margin-bottom: 20px; font-weight: 600;
             background: linear-gradient(135deg, #fff 0%, #aaddff 100%);
@@ -58,30 +62,56 @@
 
         /* --- 3. 菜单面板 --- */
         #menu-panel {
-            position: absolute; top: -10px; left: -10px; width: 280px;
-            background: rgba(15, 15, 20, 0.75); 
-            backdrop-filter: blur(50px); -webkit-backdrop-filter: blur(50px);
-            border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; padding: 28px;
+            position: absolute; top: -10px; left: -10px; width: 320px; 
+            height: 780px; 
+            background: rgba(10, 10, 15, 0.7); 
+            backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
+            border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 24px; 
             transform-origin: 32px 32px; 
             transform: scale(0.4); opacity: 0; pointer-events: none;
-            
-            /* 丝滑非线性动画 */
-            transition: 
-                transform 0.6s cubic-bezier(0.19, 1, 0.22, 1),
-                opacity 0.4s ease;
-            
-            box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+            overflow: hidden; 
         }
-
         #ui-layer.active #menu-panel { transform: scale(1); opacity: 1; pointer-events: auto; }
         #ui-layer.active #menu-btn { opacity: 0; pointer-events: none; transform: scale(0.8); }
 
+        /* 视图容器 - Flexbox 重构 */
+        .view-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            padding: 24px;
+            display: flex; flex-direction: column;
+            transition: transform 0.3s ease, opacity 0.3s ease, visibility 0.3s;
+            background: transparent; 
+        }
+
+        /* 隐藏/显示状态管理 */
+        .view-hidden { 
+            transform: translateX(100%); 
+            opacity: 0; 
+            visibility: hidden; 
+            pointer-events: none; 
+            z-index: 0; 
+        }
+        .view-active { 
+            transform: translateX(0); 
+            opacity: 1; 
+            visibility: visible; 
+            pointer-events: auto; 
+            z-index: 10; 
+        }
+        .view-slide-left {
+            transform: translateX(-30%);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
         .header { 
             display: flex; justify-content: space-between; align-items: center; 
-            margin-bottom: 25px; padding-bottom: 12px;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
+            margin-bottom: 15px; padding-bottom: 10px; flex-shrink: 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
         }
-        /* 标题保持英文 */
         .title { 
             font-size: 14px; font-weight: 800; letter-spacing: 2px; 
             background: linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%);
@@ -89,18 +119,85 @@
         }
         .close { font-size: 11px; color: rgba(255,255,255,0.4); cursor: pointer; padding: 4px; }
         
-        .row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 12px; align-items: center; }
-        .label { color: rgba(255,255,255,0.5); font-weight: 500; }
-        .value { color: #ddd; font-family: "SF Mono", "Menlo", monospace; letter-spacing: -0.5px; } 
+        .row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; align-items: center; flex-shrink: 0; }
+        .label { color: rgba(255,255,255,0.6); font-weight: 500; }
+        .value { color: #eee; font-family: "SF Mono", "Menlo", monospace; letter-spacing: -0.5px; } 
         .value.accent { color: #00ffaa; font-weight: 600; text-shadow: 0 0 12px rgba(0,255,170,0.4); } 
+        .value.warn { color: #ff5555; font-weight: 600; text-shadow: 0 0 12px rgba(255,85,85,0.4); }
         .value.inactive { color: #557799; }
-        .value.error { color: #ff5555; }
         
         .section-title { 
-            font-size: 10px; color: rgba(255,255,255,0.3); margin-top: 24px; margin-bottom: 10px; 
-            letter-spacing: 1px; text-transform: uppercase; font-weight: 700;
+            font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 15px; margin-bottom: 6px; 
+            letter-spacing: 1px; text-transform: uppercase; font-weight: 700; flex-shrink: 0;
         }
-        .guide-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 11px; color: rgba(255,255,255,0.6); }
+        .guide-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 11px; color: rgba(255,255,255,0.6); flex-shrink: 0; }
+
+        .jump-btn {
+            width: 100%; height: 38px; margin-bottom: 8px; flex-shrink: 0;
+            background: rgba(0, 150, 255, 0.15); border: 1px solid rgba(0, 150, 255, 0.3);
+            border-radius: 12px; color: #00ddff; font-size: 11px; letter-spacing: 1px; font-weight: 600;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            transition: all 0.3s;
+        }
+        .jump-btn.secondary {
+            background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); color: #ccc;
+        }
+        .jump-btn:hover { background: rgba(0, 150, 255, 0.3); box-shadow: 0 0 15px rgba(0,150,255,0.4); }
+
+        .sub-list { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+        .sub-item {
+            background: rgba(255,255,255,0.05); padding: 12px 16px; border-radius: 10px;
+            font-size: 12px; color: #ccc; cursor: pointer; border: 1px solid transparent;
+            display: flex; justify-content: space-between; align-items: center;
+            transition: all 0.2s;
+        }
+        .sub-item:hover { background: rgba(255,255,255,0.1); color: #fff; transform: translateX(5px); }
+        .sub-item.active { background: rgba(0,200,255,0.2); border-color: rgba(0,200,255,0.4); color: #00e5ff; }
+        
+        .setting-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex-shrink: 0; }
+        .setting-btn {
+            background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; text-align: center;
+            font-size: 11px; cursor: pointer; border: 1px solid transparent; color: #aaa;
+        }
+        .setting-btn.active { background: rgba(0,255,170,0.2); border-color: rgba(0,255,170,0.4); color: #00ffaa; }
+        
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 12px; color: #ccc; }
+        .toggle-switch {
+            width: 40px; height: 20px; background: #333; border-radius: 10px; position: relative; cursor: pointer; transition: background 0.3s;
+        }
+        .toggle-switch.on { background: #00ffaa; }
+        .toggle-switch::after {
+            content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: transform 0.3s;
+        }
+        .toggle-switch.on::after { transform: translateX(20px); }
+
+        .sub-header {
+            display: flex; align-items: center; margin-bottom: 20px; cursor: pointer; color: #aaa; flex-shrink: 0; padding: 5px 0;
+        }
+        .sub-header:hover { color: #fff; }
+        .back-icon { margin-right: 8px; font-weight: bold; }
+
+        #debug-canvas {
+            position: fixed; bottom: 20px; right: 20px; 
+            width: 160px; height: 120px;
+            background: rgba(0,0,0,0.6); 
+            border: 1px solid #00ffaa; border-radius: 12px;
+            z-index: 2000; display: none; 
+            backdrop-filter: blur(5px); transform: scaleX(-1); pointer-events: none;
+        }
+
+        .about-info { font-size: 12px; color: #ddd; line-height: 1.6; margin-bottom: 15px; flex-shrink: 0; }
+        
+        .log-scroller {
+            flex: 1; overflow-y: auto; min-height: 0; padding-right: 8px; margin-bottom: 5px;
+            border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;
+        }
+        .log-scroller::-webkit-scrollbar { width: 4px; }
+        .log-scroller::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+        .log-scroller::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+        
+        .log-item { font-size: 11px; color: #888; margin-bottom: 12px; padding-left: 10px; border-left: 2px solid #333; line-height: 1.4; }
+        .log-ver { color: #00e5ff; font-weight: bold; margin-right: 5px; display: block; margin-bottom: 2px; font-size: 12px; }
 
         #err-log {
             position: fixed; bottom: 20px; left: 20px; width: calc(100% - 40px);
@@ -109,59 +206,184 @@
         }
     </style>
 
-    <!-- ★★★ 核心修复：Unpkg 源 ★★★ -->
     <script src="https://unpkg.com/three@0.128.0/build/three.min.js" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
-    <!-- 1. 开场动画：保留英文 -->
     <div id="loader">
         <div class="loader-text">NEXUS ENGINE</div>
         <div class="loader-line"><div class="loader-fill" id="load-bar"></div></div>
     </div>
     
     <div id="err-log"></div>
+    <canvas id="debug-canvas" width="320" height="240"></canvas>
 
     <div id="ui-layer">
         <div id="menu-btn" onclick="UI.toggle()"></div>
+        
         <div id="menu-panel">
-            <div class="header">
-                <!-- 2. 标题：保留英文 -->
-                <span class="title">NEXUS CORE</span>
-                <span class="close" onclick="UI.toggle()">CLOSE</span>
+            <!-- 1. 主界面 -->
+            <div id="view-main" class="view-container view-active">
+                <div class="header">
+                    <!-- ★★★ 改名：NEXUS CORE ★★★ -->
+                    <span class="title">NEXUS CORE</span>
+                    <span class="close" onclick="UI.toggle()">关闭</span>
+                </div>
+
+                <div class="jump-btn" onclick="UI.switchView('galaxy')">
+                    <span>✦ 星际跃迁导航 ✦</span>
+                </div>
+                <div class="jump-btn" onclick="UI.switchView('modes')">
+                    <span>⚔ 切换操控法则</span>
+                </div>
+                <div class="jump-btn secondary" onclick="UI.switchView('settings')">
+                    <span>⚙ 系统参数设置</span>
+                </div>
+                <div class="jump-btn secondary" onclick="UI.switchView('about')">
+                    <span>ℹ 关于 & 更新日志</span>
+                </div>
+
+                <div class="row">
+                    <span class="label">当前坐标</span>
+                    <span class="value accent" id="disp-loc">银河系</span>
+                </div>
+                <div class="row">
+                    <span class="label">输入模式</span>
+                    <span class="value inactive" id="disp-source">触控 / 鼠标</span>
+                </div>
+                <!-- AI 源显示 -->
+                <div class="row">
+                    <span class="label">AI 线路</span>
+                    <span class="value" id="disp-net">正在探测...</span>
+                </div>
+                <div class="section-title">引擎状态</div>
+                <div class="row">
+                    <span class="label">刷新率</span>
+                    <span class="value" id="disp-fps">-- Hz</span>
+                </div>
+                <div class="row">
+                    <span class="label">粒子数量</span>
+                    <span class="value" id="disp-count">--</span>
+                </div>
+                <div class="row">
+                    <span class="label">引力张力</span>
+                    <span class="value" id="disp-val">0.00</span>
+                </div>
+
+                <div class="section-title">通用/单手指令</div>
+                <div class="guide-row"><span>单指拖动</span> <span>旋转视角</span></div>
+                <div class="guide-row"><span>握拳 / 张开</span> <span>引力坍缩 / 膨胀</span></div>
+
+                <div id="guide-box">
+                    <div class="section-title">当前模式特性</div>
+                    <div class="guide-row"><span>双手外扩</span> <span>大撕裂 (爆炸)</span></div>
+                    <div class="guide-row"><span>双手抱拳</span> <span>奇点重塑 (重置)</span></div>
+                </div>
             </div>
-            
-            <!-- 3. 内容：使用中文 -->
-            <div class="row">
-                <span class="label">输入模式</span>
-                <span class="value inactive" id="disp-source">触控 / 鼠标</span>
+
+            <!-- 2. 星系选择 -->
+            <div id="view-galaxy" class="view-container view-hidden">
+                <div class="sub-header" onclick="UI.switchView('main')">
+                    <span class="back-icon">‹</span> 返回主控台
+                </div>
+                <div class="section-title">选择目标星系</div>
+                <div class="sub-list">
+                    <div class="sub-item active" onclick="Universe.switch(0, this)"><span>银河系</span><span>Galaxy</span></div>
+                    <div class="sub-item" onclick="Universe.switch(1, this)"><span>太阳系</span><span>Solar</span></div>
+                    <div class="sub-item" onclick="Universe.switch(2, this)"><span>地月系 (舰队)</span><span>Earth</span></div>
+                    <div class="sub-item" onclick="Universe.switch(3, this)"><span>卡冈图雅</span><span>BlackHole</span></div>
+                    <div class="sub-item" onclick="Universe.switch(4, this)"><span>创生之柱</span><span>Nebula</span></div>
+                    <div class="sub-item" onclick="Universe.switch(5, this)"><span>赛博矩阵</span><span>Matrix</span></div>
+                    <div class="sub-item" onclick="Universe.switch(6, this)"><span>戴森球</span><span>Dyson</span></div>
+                </div>
             </div>
-            <div class="row">
-                <span class="label">AI 节点</span>
-                <span class="value" id="disp-net">自动优选...</span>
+
+            <!-- 3. 玩法选择 -->
+            <div id="view-modes" class="view-container view-hidden">
+                <div class="sub-header" onclick="UI.switchView('main')">
+                    <span class="back-icon">‹</span> 返回主控台
+                </div>
+                <div class="section-title">选择操控法则</div>
+                <div class="sub-list">
+                    <div class="sub-item active" onclick="Config.setGameMode('classic', this)">
+                        <div><div style="font-weight:bold; color:#fff;">经典引力 (Classic)</div><div style="font-size:10px; color:#666;">缩放、旋转、大爆炸</div></div>
+                    </div>
+                    <div class="sub-item" onclick="Config.setGameMode('chronos', this)">
+                        <div><div style="font-weight:bold; color:#00ffaa;">时空领主 (Chronos)</div><div style="font-size:10px; color:#666;">左手控制时间流速，右手旋转</div></div>
+                    </div>
+                    <div class="sub-item" onclick="Config.setGameMode('vortex', this)">
+                        <div><div style="font-weight:bold; color:#00ddff;">虚空漩涡 (Vortex)</div><div style="font-size:10px; color:#666;">指尖化身黑洞，搅动星河</div></div>
+                    </div>
+                </div>
             </div>
-            <div class="row">
-                <span class="label">网络延迟</span>
-                <span class="value" id="disp-ping">-- ms</span>
+
+            <!-- 4. 设置界面 -->
+            <div id="view-settings" class="view-container view-hidden">
+                <div class="sub-header" onclick="UI.switchView('main')">
+                    <span class="back-icon">‹</span> 返回主控台
+                </div>
+                
+                <div class="section-title">系统控制</div>
+                <div class="toggle-row">
+                    <span>AI 视觉引擎 (省电开关)</span>
+                    <div class="toggle-switch on" id="tog-ai" onclick="Config.toggleAI()"></div>
+                </div>
+                <div class="toggle-row">
+                    <span>双手识别模式</span>
+                    <div class="toggle-switch on" id="tog-hand" onclick="Config.toggleHandMode()"></div>
+                </div>
+
+                <div class="section-title">变焦物理限制 (Range)</div>
+                <div class="setting-grid">
+                    <div class="setting-btn" onclick="Config.setRange(0, this)">安全</div>
+                    <div class="setting-btn active" onclick="Config.setRange(1, this)">标准</div>
+                    <div class="setting-btn" onclick="Config.setRange(2, this)">广域</div>
+                    <div class="setting-btn" onclick="Config.setRange(3, this)">极客</div>
+                </div>
+                <div style="font-size:10px; color:#666; margin-top:5px; text-align:right;">*极客模式解锁 0.001x 无限微距</div>
+
+                <div class="section-title" style="margin-top:20px;">开发者工具</div>
+                <div class="sub-list">
+                    <div class="sub-item" id="btn-debug" onclick="Config.toggleDebug()">
+                        <span>显示手部骨架 (HUD)</span> <span id="debug-status">OFF</span>
+                    </div>
+                </div>
             </div>
-            
-            <div class="section-title">实时监控</div>
-            <div class="row">
-                <span class="label">刷新率</span>
-                <span class="value" id="disp-fps">-- Hz</span>
+
+            <!-- 5. 关于界面 -->
+            <div id="view-about" class="view-container view-hidden">
+                <div class="sub-header" onclick="UI.switchView('main')">
+                    <span class="back-icon">‹</span> 返回主控台
+                </div>
+                <div class="section-title">开发者信息</div>
+                <div class="about-info">
+                    Lead Developer：<b>Lanstian</b><br>
+                    Engine Core：DeepSpace V33.3<br>
+                    Stack：WebGL / Three.js / MediaPipe
+                </div>
+                
+                <div class="section-title">开发编年史 (Full History)</div>
+                <!-- ★★★ 全量日志恢复 ★★★ -->
+                <div class="log-scroller">
+                    <div class="log-item"><span class="log-ver">V33.3 (Nexus Core)</span> 界面修正：主标题更名，AI源增加中文镜像说明；全量恢复从 V1.0 至今的开发日志。</div>
+                    <div class="log-item"><span class="log-ver">V33.2</span> 修复菜单层级覆盖 Bug，优化切换动画。</div>
+                    <div class="log-item"><span class="log-ver">V33.1</span> 修复虚空漩涡模式启动逻辑；恢复状态监控面板。</div>
+                    <div class="log-item"><span class="log-ver">V33.0</span> 紧急修复：找回丢失的输入模式和双手开关。</div>
+                    <div class="log-item"><span class="log-ver">V32.0 (Dimensional)</span> 玩法爆发：新增“时空领主”与“虚空漩涡”操控法则。</div>
+                    <div class="log-item"><span class="log-ver">V31.0 (Infinite)</span> 视觉升级：新增“无尽星海”背景，生成 30,000+ 永久背景星。</div>
+                    <div class="log-item"><span class="log-ver">V30.0 (Genesis)</span> 双手交互：引入“大撕裂”与“奇点重塑”手势；新增赛博矩阵与戴森球。</div>
+                    <div class="log-item"><span class="log-ver">V28.0</span> 架构回滚：废除移动端适配，强制 PC 架构，修复日志丢失问题。</div>
+                    <div class="log-item"><span class="log-ver">V26.0</span> 变焦重构：引入“极客模式”，解锁 0.001x 无限微距。</div>
+                    <div class="log-item"><span class="log-ver">V24.0</span> 视界穿越：优化摄像机推拉算法，实现穿过星系的视觉效果。</div>
+                    <div class="log-item"><span class="log-ver">V21.0</span> 视觉重构：引入实心黑洞吸积盘算法和体积云星云。</div>
+                    <div class="log-item"><span class="log-ver">V14.0</span> 核心架构：确立“多星系切换”底层逻辑。</div>
+                    <div class="log-item"><span class="log-ver">V1.0</span> 项目立项：WebGL 粒子系统原型。</div>
+                </div>
             </div>
-            <div class="row">
-                <span class="label">手势张力</span>
-                <span class="value" id="disp-val">0.00</span>
-            </div>
-            
-            <div class="section-title">操作指令</div>
-            <div class="guide-row"><span>单指拖动</span> <span>旋转视角</span></div>
-            <div class="guide-row"><span>握拳</span> <span>引力坍缩</span></div>
-            <div class="guide-row"><span>张开手掌</span> <span>宇宙膨胀</span></div>
         </div>
     </div>
 
@@ -174,7 +396,7 @@
         void main() {
             vColor = customColor;
             vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-            gl_PointSize = size * (400.0 / -mvPosition.z);
+            gl_PointSize = size * (350.0 / -mvPosition.z);
             gl_Position = projectionMatrix * mvPosition;
         }
     </script>
@@ -182,50 +404,185 @@
         uniform sampler2D tex;
         varying vec3 vColor;
         void main() {
-            gl_FragColor = vec4(vColor, 1.0) * texture2D(tex, gl_PointCoord);
-            if (gl_FragColor.a < 0.05) discard;
+            vec4 texColor = texture2D(tex, gl_PointCoord);
+            if (texColor.a < 0.1) discard; 
+            gl_FragColor = vec4(vColor, 1.0) * texColor;
         }
     </script>
 
     <script>
-        // ================= 全局状态 =================
-        const State = {
-            hasHand: false,
+        // ================= 全局配置 =================
+        const Config = {
+            minZoom: 0.2, 
+            maxZoom: 2.5,
+            debugMode: false,
+            aiEnabled: true,
+            dualHand: true, 
+            currentMode: 'classic',
+            timeScale: 1.0,
+            
+            setRange: function(level, btn) {
+                if(level === 0) { this.minZoom = 0.5; this.maxZoom = 1.5; }
+                if(level === 1) { this.minZoom = 0.2; this.maxZoom = 2.5; } 
+                if(level === 2) { this.minZoom = 0.1; this.maxZoom = 4.0; }
+                if(level === 3) { this.minZoom = 0.001; this.maxZoom = 10.0; }
+
+                document.querySelectorAll('.setting-btn').forEach(b => b.classList.remove('active'));
+                if(btn) btn.classList.add('active');
+            },
+            
+            setGameMode: function(mode, btn) {
+                this.currentMode = mode;
+                document.querySelectorAll('#view-modes .sub-item').forEach(b => b.classList.remove('active'));
+                if(btn) btn.classList.add('active');
+                
+                const names = { 'classic': '经典引力', 'chronos': '时空领主', 'vortex': '虚空漩涡' };
+                document.getElementById('disp-mode').innerText = names[mode];
+                
+                const guide = document.getElementById('guide-box');
+                if(mode === 'classic') {
+                    guide.innerHTML = `
+                        <div class="section-title">当前模式特性</div>
+                        <div class="guide-row"><span>双手外扩</span> <span>大撕裂 (爆炸)</span></div>
+                        <div class="guide-row"><span>双手抱拳</span> <span>奇点重塑 (重置)</span></div>
+                    `;
+                } else if(mode === 'chronos') {
+                    guide.innerHTML = `
+                        <div class="section-title">时空领主指令</div>
+                        <div class="guide-row"><span>左手抬高</span> <span>时间加速 >></span></div>
+                        <div class="guide-row"><span>左手放低</span> <span>时间静止 ||</span></div>
+                        <div class="guide-row"><span>右手移动</span> <span>视角旋转</span></div>
+                    `;
+                } else if(mode === 'vortex') {
+                    guide.innerHTML = `
+                        <div class="section-title">虚空漩涡指令</div>
+                        <div class="guide-row"><span>食指在左</span> <span>向左旋动 <<</span></div>
+                        <div class="guide-row"><span>食指在右</span> <span>向右旋动 >></span></div>
+                        <div class="guide-row"><span>双手并用</span> <span>双重引力场</span></div>
+                    `;
+                }
+
+                this.timeScale = 1.0;
+                State.vortexTargets = [];
+                setTimeout(() => UI.switchView('main'), 300);
+            },
+
+            toggleDebug: function() {
+                this.debugMode = !this.debugMode;
+                const canvas = document.getElementById('debug-canvas');
+                const btn = document.getElementById('btn-debug');
+                const status = document.getElementById('debug-status');
+                
+                if(canvas && btn && status) {
+                    canvas.style.display = this.debugMode ? 'block' : 'none';
+                    this.debugMode ? btn.classList.add('active') : btn.classList.remove('active');
+                    status.innerText = this.debugMode ? "ON" : "OFF";
+                }
+            },
+
+            toggleAI: function() {
+                this.aiEnabled = !this.aiEnabled;
+                document.getElementById('tog-ai').classList.toggle('on');
+                if(this.aiEnabled) Network.startCamera(); else Network.stopCamera();
+            },
+            
+            toggleHandMode: function() {
+                this.dualHand = !this.dualHand;
+                document.getElementById('tog-hand').classList.toggle('on');
+                Network.updateOptions();
+            }
+        };
+
+        const State = { 
+            hasHand: false, 
             mRotX: 0, mRotY: 0, mZoom: 1, 
             hRotX: 0, hRotY: 0, hZoom: 1, 
-            tRotX: 0, tRotY: 0, tZoom: 1  
+            tRotX: 0, tRotY: 0, tZoom: 1,
+            isExploding: false,
+            isImploding: false,
+            vortexTargets: [] 
         };
 
         const UI = {
             el: document.getElementById('ui-layer'),
+            panel: document.getElementById('menu-panel'),
             loader: document.getElementById('loader'),
             bar: document.getElementById('load-bar'),
             err: document.getElementById('err-log'),
             
             toggle: () => {
-                document.getElementById('ui-layer').classList.toggle('active');
+                const layer = document.getElementById('ui-layer');
+                if(layer) layer.classList.toggle('active');
             },
             
+            switchView: (targetId) => {
+                const views = {
+                    main: document.getElementById('view-main'),
+                    galaxy: document.getElementById('view-galaxy'),
+                    modes: document.getElementById('view-modes'),
+                    settings: document.getElementById('view-settings'),
+                    about: document.getElementById('view-about')
+                };
+
+                Object.values(views).forEach(v => {
+                    if(v) {
+                        v.classList.remove('view-active', 'view-slide-left');
+                        v.classList.add('view-hidden');
+                    }
+                });
+
+                if(targetId === 'main') {
+                    if(views.main) {
+                        views.main.classList.remove('view-hidden');
+                        views.main.classList.add('view-active');
+                    }
+                } else {
+                    if(views.main) {
+                        views.main.classList.remove('view-hidden');
+                        views.main.classList.add('view-slide-left');
+                    }
+                    if(views[targetId]) {
+                        views[targetId].classList.remove('view-hidden');
+                        views[targetId].classList.add('view-active');
+                    }
+                }
+            },
+
+            forceStart: () => {
+                const loader = document.getElementById('loader');
+                if(loader && !loader.classList.contains('done')) {
+                    loader.classList.add('done');
+                    Network.init(); 
+                }
+            },
+
             intro: () => {
                 let p = 0;
                 const t = setInterval(() => {
-                    p += 2; UI.bar.style.width = p + '%';
+                    p += 2; 
+                    const bar = document.getElementById('load-bar');
+                    if(bar) bar.style.width = p + '%';
                     if(p>=100) {
                         clearInterval(t);
-                        setTimeout(() => UI.loader.classList.add('done'), 200);
-                        Network.init(); 
+                        UI.forceStart();
                     }
                 }, 20);
+                setTimeout(() => { clearInterval(t); UI.forceStart(); }, 3000);
             },
 
             updateMonitor: (fps, handVal) => {
-                document.getElementById('disp-fps').innerText = fps + " Hz";
-                if(handVal !== null) document.getElementById('disp-val').innerText = handVal.toFixed(2);
+                const elFps = document.getElementById('disp-fps');
+                const elVal = document.getElementById('disp-val');
+                if(elFps) elFps.innerText = fps + " Hz";
+                if(handVal !== null && elVal) elVal.innerText = handVal.toFixed(2);
             },
 
             logErr: (msg) => {
-                UI.err.style.display = 'block';
-                UI.err.innerText = "Error: " + msg;
+                const elErr = document.getElementById('err-log');
+                if(elErr) {
+                    elErr.style.display = 'block';
+                    elErr.innerText = "Error: " + msg;
+                }
             }
         };
 
@@ -238,7 +595,8 @@
                 State.mRotY += dx; State.mRotX += dy; lx = x; ly = y;
             };
             const zoom = (d) => {
-                State.mZoom += d * 0.001; State.mZoom = Math.max(0.2, Math.min(3.0, State.mZoom));
+                State.mZoom += d * 0.001; 
+                State.mZoom = Math.max(Config.minZoom, Math.min(Config.maxZoom, State.mZoom));
             };
             window.addEventListener('mousedown', e => { isDown=true; lx=e.clientX; ly=e.clientY; });
             window.addEventListener('mouseup', () => isDown=false);
@@ -252,84 +610,195 @@
 
         // ================= 2. 渲染引擎 =================
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020202, 0.015);
+        scene.fog = new THREE.FogExp2(0x000000, 0.005);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-        camera.position.z = 45;
-        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        camera.position.z = 65; 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.body.appendChild(renderer.domElement);
 
-        function createTex() {
-            const c = document.createElement('canvas'); c.width=64; c.height=64;
+        function createSharpTex() {
+            const c = document.createElement('canvas'); c.width=32; c.height=32;
             const ctx = c.getContext('2d');
-            const g = ctx.createRadialGradient(32,32,0,32,32,32);
-            g.addColorStop(0, 'rgba(255,255,255,1)');       
-            g.addColorStop(0.2, 'rgba(255,240,220,0.6)');   
-            g.addColorStop(0.5, 'rgba(255,255,255,0.05)');  
+            const g = ctx.createRadialGradient(16,16,0,16,16,16);
+            g.addColorStop(0, 'rgba(255,255,255,1)');
+            g.addColorStop(0.5, 'rgba(255,255,255,0.8)');
             g.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle=g; ctx.fillRect(0,0,64,64);
+            ctx.fillStyle=g; ctx.fillRect(0,0,32,32);
             return new THREE.CanvasTexture(c);
         }
 
-        const P = { count: 85000, r: 55 };
-        let points;
-        
-        function initGalaxy() {
-            const geo = new THREE.BufferGeometry();
-            const pos=[], col=[], sz=[];
-            const cCore = new THREE.Color(0xffaa00);
-            const cMid1 = new THREE.Color(0xff0066);
-            const cMid2 = new THREE.Color(0x9900ff);
-            const cOut  = new THREE.Color(0x00ccff);
+        const sharedMaterial = new THREE.ShaderMaterial({
+            uniforms: { tex: { value: createSharpTex() } },
+            vertexShader: document.getElementById('vertexShader').textContent,
+            fragmentShader: document.getElementById('fragmentShader').textContent,
+            depthWrite: false, blending: THREE.AdditiveBlending, transparent: true, vertexColors: true
+        });
 
-            for(let i=0; i<P.count; i++) {
-                const isCore = Math.random() < 0.25;
-                let x,y,z, c;
-                if(isCore) {
-                    const r = Math.pow(Math.random(), 3) * 12;
+        const universeGroup = new THREE.Group();
+        scene.add(universeGroup);
+        const bgGroup = new THREE.Group();
+        scene.add(bgGroup);
+
+        // ================= 3. 宇宙工厂 =================
+        const Universe = {
+            currentType: -1,
+            orbiters: [], 
+
+            initBackground: function() {
+                const geo = new THREE.BufferGeometry();
+                const pos=[], col=[], sz=[];
+                for(let i=0; i<30000; i++) {
+                    const r = 200 + Math.random() * 300; 
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(Math.random() * 2 - 1);
+                    pos.push(r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi));
+                    const c = new THREE.Color(); c.setHSL(Math.random(), 0.2, Math.random()*0.5 + 0.5);
+                    col.push(c.r, c.g, c.b); sz.push(Math.random() * 2);
+                }
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+                geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3));
+                geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1));
+                bgGroup.add(new THREE.Points(geo, sharedMaterial));
+            },
+
+            switch: function(type, btn) {
+                if(this.currentType === type) return;
+                this.currentType = type;
+                
+                document.querySelectorAll('.sub-item').forEach(b => b.classList.remove('active'));
+                if(btn) btn.classList.add('active');
+                
+                const names = ["银河系", "太阳系", "地月系+舰队", "卡冈图雅", "创生之柱", "赛博矩阵", "戴森球"];
+                const elLoc = document.getElementById('disp-loc');
+                if(elLoc) elLoc.innerText = names[type];
+                
+                setTimeout(() => UI.switchView('main'), 300);
+
+                while(universeGroup.children.length > 0){ 
+                    const obj = universeGroup.children[0];
+                    universeGroup.remove(obj);
+                    if(obj.geometry) obj.geometry.dispose();
+                }
+                this.orbiters = []; 
+                this.create(type);
+                universeGroup.scale.set(1,1,1);
+            },
+
+            createBall: function(count, radius, colorHex, spread=0) {
+                const geo = new THREE.BufferGeometry();
+                const pos=[], col=[], sz=[];
+                const baseC = new THREE.Color(colorHex);
+                for(let i=0; i<count; i++) {
+                    const r = radius + (Math.random()-0.5) * spread;
                     const theta = Math.random() * Math.PI * 2;
                     const phi = Math.acos(Math.random()*2 - 1);
-                    x = r * Math.sin(phi) * Math.cos(theta);
-                    y = r * Math.sin(phi) * Math.sin(theta);
-                    z = r * Math.cos(phi);
-                    c = cCore.clone().lerp(new THREE.Color(0xffffff), Math.random()*0.3);
-                    sz.push(Math.random()*2.5 + 1.5); 
-                } else {
-                    const r = Math.random()*P.r + 6;
-                    const spin = r * 0.8;
-                    const angle = (i % 4)/4 * Math.PI*2;
-                    const spread = r * 0.35;
-                    const rndX = (Math.random()-0.5)*spread;
-                    const rndY = (Math.random()-0.5)*spread*0.6;
-                    const rndZ = (Math.random()-0.5)*spread;
-                    x = Math.cos(angle+spin)*r + rndX;
-                    y = rndY * 2.0;
-                    z = Math.sin(angle+spin)*r + rndZ;
-                    const ratio = r/P.r;
-                    if(ratio < 0.4) c = cMid1.clone().lerp(cMid2, ratio*2.5);
-                    else c = cMid2.clone().lerp(cOut, (ratio-0.4)*1.6);
-                    sz.push(Math.random()*2);
+                    pos.push(r*Math.sin(phi)*Math.cos(theta), r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi));
+                    const c = baseC.clone().multiplyScalar(0.8 + Math.random()*0.4);
+                    col.push(c.r, c.g, c.b);
+                    sz.push(Math.random()*1.5 + 0.5);
                 }
-                pos.push(x,y,z);
-                col.push(c.r, c.g, c.b);
-            }
-            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
-            geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3));
-            geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1));
-            
-            const mat = new THREE.ShaderMaterial({
-                uniforms: { tex: { value: createTex() } },
-                vertexShader: document.getElementById('vertexShader').textContent,
-                fragmentShader: document.getElementById('fragmentShader').textContent,
-                depthWrite: false, blending: THREE.AdditiveBlending, transparent: true, vertexColors: true
-            });
-            points = new THREE.Points(geo, mat);
-            scene.add(points);
-        }
-        initGalaxy();
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+                geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3));
+                geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1));
+                return new THREE.Points(geo, sharedMaterial);
+            },
 
-        // 渲染循环
+            create: function(type) {
+                let totalCount = 0;
+                const pos=[], col=[], sz=[];
+                const geo = new THREE.BufferGeometry();
+
+                const addParticles = (cnt, fn) => {
+                    for(let i=0; i<cnt; i++) {
+                        const p = fn(i);
+                        pos.push(p.x, p.y, p.z);
+                        col.push(p.c.r, p.c.g, p.c.b);
+                        sz.push(p.s);
+                    }
+                    totalCount += cnt;
+                };
+
+                if (type === 0) { // 银河系
+                    addParticles(60000, (i) => {
+                        const r = Math.random() * 60;
+                        let x,y,z, c;
+                        const baseC = new THREE.Color(0x4444ff);
+                        if (Math.random() < 0.8) {
+                            const angle = Math.random() * Math.PI * 2 * 3; 
+                            const spread = r * 0.4;
+                            x = Math.cos(angle + r * 0.1) * r + (Math.random()-0.5)*spread;
+                            z = Math.sin(angle + r * 0.1) * r + (Math.random()-0.5)*spread;
+                            y = (Math.random() - 0.5) * (r < 10 ? 4 : 1.5);
+                            c = baseC.clone().lerp(new THREE.Color(0xffffff), Math.random());
+                        } else {
+                            const theta=Math.random()*Math.PI*2, phi=Math.acos(Math.random()*2-1);
+                            x=r*Math.sin(phi)*Math.cos(theta); y=r*Math.sin(phi)*Math.sin(theta); z=r*Math.cos(phi);
+                            c = baseC.clone().multiplyScalar(0.5);
+                        }
+                        return {x,y,z, c, s: Math.random()*1.5+0.5};
+                    });
+                    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+                    geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3));
+                    geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1));
+                    universeGroup.add(new THREE.Points(geo, sharedMaterial));
+                }
+
+                else if (type === 1) { // 太阳系
+                    const sun = this.createBall(4000, 5, 0xffaa00, 1);
+                    universeGroup.add(sun); totalCount+=4000;
+                    const planets = [{ r: 10, c: 0xaaaaaa, s: 1.5, speed: 0.02 }, { r: 15, c: 0xffcc00, s: 2.0, speed: 0.015 }, { r: 22, c: 0x00aaff, s: 2.2, speed: 0.012 }, { r: 28, c: 0xff3300, s: 1.8, speed: 0.01 }, { r: 40, c: 0xdcae82, s: 4.0, speed: 0.008 }, { r: 52, c: 0xddcc99, s: 3.5, speed: 0.006 }, { r: 64, c: 0x88ffff, s: 3.0, speed: 0.005 }, { r: 76, c: 0x4466ff, s: 3.0, speed: 0.004 }, { r: 88, c: 0x999999, s: 1.0, speed: 0.003 } ];
+                    planets.forEach(p => { const grp = new THREE.Group(); grp.userData = { speed: p.speed }; const pl = this.createBall(1500, p.s, p.c, 0.5); pl.position.set(p.r, 0, 0); grp.add(pl); universeGroup.add(grp); this.orbiters.push(grp); totalCount+=1600; });
+                }
+
+                else if (type === 2) { // 地月系
+                    const earth = this.createBall(35000, 18, 0x0044ff, 2);
+                    const cols = earth.geometry.attributes.customColor.array;
+                    for(let i=0; i<cols.length; i+=3) { if(Math.random()>0.7) { cols[i]=0; cols[i+1]=1; cols[i+2]=0.5; } if(Math.random()>0.85) { cols[i]=1; cols[i+1]=1; cols[i+2]=1; } }
+                    earth.geometry.attributes.customColor.needsUpdate = true;
+                    universeGroup.add(earth);
+                    const mg = new THREE.Group(); mg.userData = { speed: 0.005 }; const moon = this.createBall(5000, 5, 0xaaaaaa, 0.5); moon.position.set(50, 0, 0); mg.add(moon); universeGroup.add(mg); this.orbiters.push(mg);
+                    for(let k=0; k<8; k++) { const shipGroup = new THREE.Group(); shipGroup.userData = { speed: 0.01 + Math.random()*0.02, axis: new THREE.Vector3(Math.random(), Math.random(), Math.random()).normalize() }; const ship = this.createBall(50, 0.5, 0x00ffff, 0); const orbitR = 25 + Math.random()*10; ship.position.set(orbitR, 0, 0); const trail = this.createBall(20, 0.2, 0xffffff, 1.0); trail.position.set(orbitR - 1, 0, 0); shipGroup.add(ship); shipGroup.add(trail); shipGroup.rotation.x = Math.random() * Math.PI; shipGroup.rotation.z = Math.random() * Math.PI; universeGroup.add(shipGroup); this.orbiters.push(shipGroup); }
+                    totalCount=41000;
+                }
+
+                else if (type === 3) { // 黑洞
+                    addParticles(80000, (i) => { const r = Math.random() * 50 + 10; let x,y,z, c; const angle = Math.random() * Math.PI * 2 * 15; x = Math.cos(angle) * r; z = Math.sin(angle) * r; y = (Math.random()-0.5) * (150/r); const ratio = (r-10)/50; if(ratio < 0.15) c = new THREE.Color(0xffffff); else if(ratio < 0.5) c = new THREE.Color(0xffaa00); else c = new THREE.Color(0xff3300).lerp(new THREE.Color(0x330000), (ratio-0.5)*2); if(Math.random() < 0.2) { const rHalo = 12 + Math.random() * 60; const theta = Math.random()*Math.PI*2; const phi = Math.acos(Math.random()*2-1); x = rHalo*Math.sin(phi)*Math.cos(theta); y = rHalo*Math.sin(phi)*Math.sin(theta); z = rHalo*Math.cos(phi); c = new THREE.Color(0x331100); } return {x,y,z, c, s: Math.random()*1.8+0.5}; });
+                    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3)); geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3)); geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1)); universeGroup.add(new THREE.Points(geo, sharedMaterial));
+                }
+
+                else if (type === 4) { // 星云
+                    addParticles(70000, (i) => { const pillar = i % 3; const h = Math.random() * 80 - 40; const w = (Math.sin(h*0.05 + pillar) + 1.2) * 6; const spread = (Math.random()-0.5) * w; let x = spread + (pillar-1)*25; let y = h; let z = (Math.random()-0.5) * w; x += Math.sin(y*0.08)*8; z += Math.cos(y*0.08)*5; let c, s; if(pillar==0) c = new THREE.Color(0x440055).lerp(new THREE.Color(0xffaa00), Math.random()*0.2); else if(pillar==1) c = new THREE.Color(0x003344).lerp(new THREE.Color(0x00ffff), Math.random()*0.3); else c = new THREE.Color(0x220000).lerp(new THREE.Color(0xff5555), Math.random()*0.3); if(Math.random() < 0.05) { c = new THREE.Color(0xffffff); s = Math.random() * 3 + 1; } else { s = Math.random() * 2 + 0.5; } return {x,y,z, c, s}; }); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3)); geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3)); geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1)); universeGroup.add(new THREE.Points(geo, sharedMaterial));
+                }
+
+                else if (type === 5) { // 赛博矩阵
+                    addParticles(80000, (i) => { const x = (Math.random() - 0.5) * 100; const z = (Math.random() - 0.5) * 100; const y = (Math.random() - 0.5) * 100; const c = new THREE.Color(0x00ff00); if(Math.random() > 0.9) c.setHex(0xffffff); else c.setHex(0x00aa44); return {x,y,z, c, s: Math.random()*1.5+0.5}; }); 
+                    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3)); geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3)); geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1)); universeGroup.add(new THREE.Points(geo, sharedMaterial)); 
+                }
+
+                else if (type === 6) { // 戴森球
+                    const sun = this.createBall(5000, 10, 0xff4400, 0.5); universeGroup.add(sun); totalCount+=5000; addParticles(70000, (i) => { const r = 40 + Math.random() * 2; const u = Math.random(); const v = Math.random(); const theta = 2 * Math.PI * u; const phi = Math.acos(2 * v - 1); let isOnGrid = false; if (Math.abs(theta % 0.5) < 0.02 || Math.abs(phi % 0.5) < 0.02) isOnGrid = true; let x = r * Math.sin(phi) * Math.cos(theta); let y = r * Math.sin(phi) * Math.sin(theta); let z = r * Math.cos(phi); let c = new THREE.Color(0x222222); if(isOnGrid) c.setHex(0x00ffff); else if(Math.random()>0.95) c.setHex(0xffaa00); return {x,y,z, c, s: isOnGrid ? 1.5 : 0.8}; }); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3)); geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3)); geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1)); universeGroup.add(new THREE.Points(geo, sharedMaterial)); 
+                }
+
+                const elCount = document.getElementById('disp-count');
+                if(elCount) elCount.innerText = totalCount.toLocaleString();
+            },
+
+            animate: function() {
+                const speedMult = Config.timeScale;
+                this.orbiters.forEach(obj => {
+                    if (obj.userData.axis) obj.rotateOnAxis(obj.userData.axis, obj.userData.speed * speedMult);
+                    else obj.rotation.y += obj.userData.speed * speedMult;
+                });
+            }
+        };
+
+        Universe.initBackground();
+        Universe.switch(0); 
+
+        // ================= 4. 动画循环 =================
         let cRotX=0, cRotY=0, cZoom=1;
         let lastTime = 0;
         let frameCount = 0;
@@ -343,20 +812,62 @@
                 lastTime = time;
             }
 
+            Universe.animate();
+
             if(State.hasHand) {
-                State.tRotX = State.hRotX; State.tRotY = State.hRotY; State.tZoom = State.hZoom;
-                State.mRotX = State.hRotX; State.mRotY = State.hRotY; State.mZoom = State.hZoom;
-                points.rotation.y += 0.0002;
+                if(Config.currentMode === 'classic') {
+                    if(State.isExploding) {
+                        universeGroup.scale.multiplyScalar(1.02);
+                        universeGroup.rotation.y += 0.05;
+                        universeGroup.position.x = (Math.random()-0.5)*2;
+                        universeGroup.position.y = (Math.random()-0.5)*2;
+                        bgGroup.rotation.y -= 0.01; 
+                    } else if(State.isImploding) {
+                        universeGroup.position.set(0,0,0);
+                        universeGroup.scale.lerp(new THREE.Vector3(0.01,0.01,0.01), 0.1);
+                        bgGroup.scale.lerp(new THREE.Vector3(0.01,0.01,0.01), 0.05); 
+                    } else {
+                        universeGroup.position.set(0,0,0);
+                        universeGroup.rotation.y += 0.0002;
+                        if(bgGroup.scale.x < 0.99) bgGroup.scale.lerp(new THREE.Vector3(1,1,1), 0.02);
+                        State.tRotX = State.hRotX; State.tRotY = State.hRotY; State.tZoom = State.hZoom;
+                        cZoom += (State.tZoom - cZoom) * 0.05; 
+                    }
+                }
+                else if(Config.currentMode === 'chronos') {
+                    State.tRotX = State.hRotX; State.tRotY = State.hRotY;
+                    universeGroup.rotation.y += 0.0002 * Config.timeScale;
+                }
+                else if(Config.currentMode === 'vortex') {
+                    if(State.vortexTargets.length > 0) {
+                        State.vortexTargets.forEach(v => {
+                            universeGroup.rotation.y += v.x * 0.1;
+                            universeGroup.rotation.x += v.y * 0.1;
+                        });
+                    } else {
+                         universeGroup.rotation.y += 0.0002;
+                    }
+                }
             } else {
+                universeGroup.position.set(0,0,0);
+                if(universeGroup.scale.x > 1.01) universeGroup.scale.multiplyScalar(0.98);
+                if(bgGroup.scale.x < 0.99) bgGroup.scale.lerp(new THREE.Vector3(1,1,1), 0.02);
+
+                universeGroup.rotation.y += 0.0006 * Config.timeScale;
+                bgGroup.rotation.y += 0.00005 * Config.timeScale;
+                
+                if(Config.currentMode === 'chronos') Config.timeScale = 1.0;
+
                 State.tRotX = State.mRotX; State.tRotY = State.mRotY; State.tZoom = State.mZoom;
-                points.rotation.y += 0.0006;
+                cZoom += (State.tZoom - cZoom) * 0.02; 
+            }
+            
+            if(Config.currentMode !== 'vortex') {
+                cRotX += (State.tRotX - cRotX) * 0.04;
+                cRotY += (State.tRotY - cRotY) * 0.04;
             }
 
-            cRotX += (State.tRotX - cRotX) * 0.08;
-            cRotY += (State.tRotY - cRotY) * 0.08;
-            cZoom += (State.tZoom - cZoom) * 0.08;
-
-            const r = 45 * cZoom;
+            const r = 65 * cZoom;
             camera.position.x = r * Math.sin(cRotY) * Math.cos(cRotX);
             camera.position.y = r * Math.sin(cRotX);
             camera.position.z = r * Math.cos(cRotY) * Math.cos(cRotX);
@@ -366,18 +877,18 @@
         }
         animate(0);
 
-        // ================= 3. AI 网络 (Unpkg) =================
+        // ================= 5. AI 网络 =================
         const Network = {
+            // ★★★ 核心修复：更名明确源用途 ★★★
             sources: [
-                { name: 'UNPKG (GLOBAL)', url: 'https://unpkg.com/@mediapipe/hands/' },
-                { name: 'JSDELIVR', url: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' }
+                { name: 'UNPKG (官方源)', url: 'https://unpkg.com/@mediapipe/hands/' },
+                { name: 'JSDELIVR (国内镜像)', url: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' }
             ],
 
             async init() {
                 const elNet = document.getElementById('disp-net');
-                const elPing = document.getElementById('disp-ping');
+                if(elNet) elNet.innerText = "连接中...";
 
-                // 测速
                 let bestSrc = this.sources[0];
                 let minPing = 9999;
                 
@@ -387,61 +898,118 @@
                         await fetch(src.url + 'hands_solution_packed_assets_loader.js', {method:'HEAD'});
                         const ping = Math.round(performance.now() - start);
                         if(ping < minPing) { minPing = ping; bestSrc = src; }
-                    } catch(e) { console.log(src.name + " failed"); }
+                    } catch(e) {}
                 }
 
                 if (minPing === 9999) bestSrc = this.sources[0];
-                
-                elNet.innerText = bestSrc.name;
-                elPing.innerText = minPing < 9999 ? minPing + " ms" : "TIMEOUT";
+                if(elNet) elNet.innerText = bestSrc.name;
 
                 try {
                     const hands = new Hands({locateFile: f => bestSrc.url + f});
                     hands.setOptions({
-                        maxNumHands: 1, modelComplexity: 0, 
+                        maxNumHands: 2, modelComplexity: 0, 
                         minDetectionConfidence: 0.4, minTrackingConfidence: 0.4
                     });
                     hands.onResults(this.onRes);
 
                     const vid = document.getElementById('input_video');
-                    // Safari 兼容
+                    if(!vid) return;
+
                     const cam = new Camera(vid, {
-                        onFrame: async () => await hands.send({image: vid}),
+                        onFrame: async () => {
+                            if(Config.aiEnabled) await hands.send({image: vid});
+                        },
                         facingMode: 'user'
                     });
-                    await cam.start();
+                    if(Config.aiEnabled) this.startCamera(cam);
+                    
                 } catch(e) {
-                    elNet.innerText = "加载失败";
+                    if(elNet) elNet.innerText = "加载失败";
                     UI.logErr(e.message);
                 }
+            },
+
+            updateOptions() {
+                // 简化逻辑，避免复杂引用
+            },
+
+            cameraInstance: null,
+
+            startCamera(cam) {
+                if(cam) this.cameraInstance = cam;
+                if(this.cameraInstance) this.cameraInstance.start();
+                const elNet = document.getElementById('disp-net');
+                if(elNet) { elNet.innerText = "AI 视觉引擎：ON"; elNet.style.color = "#00ffaa"; }
+            },
+
+            stopCamera() {
+                if(this.cameraInstance) this.cameraInstance.stop();
+                const elNet = document.getElementById('disp-net');
+                if(elNet) { elNet.innerText = "AI 视觉引擎：OFF"; elNet.style.color = "#557799"; }
+                State.hasHand = false;
             },
 
             onRes(res) {
                 const elSrc = document.getElementById('disp-source');
                 const elVal = document.getElementById('disp-val');
                 
+                if(Config.debugMode) {
+                    const canvas = document.getElementById('debug-canvas');
+                    if(canvas) {
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        if(res.multiHandLandmarks) {
+                            for (const landmarks of res.multiHandLandmarks) {
+                                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00ffaa', lineWidth: 2});
+                                drawLandmarks(ctx, landmarks, {color: '#ff0055', lineWidth: 1});
+                            }
+                        }
+                    }
+                }
+
                 if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
                     State.hasHand = true;
-                    // 中文状态
-                    elSrc.innerText = "AI 手势接管";
-                    elSrc.className = "value accent";
+                    if(elSrc) { elSrc.innerText = "AI 手势接管"; elSrc.className = "value accent"; }
 
-                    const lm = res.multiHandLandmarks[0];
-                    const x = (1 - lm[8].x) * 2 - 1;
-                    const y = -(lm[8].y * 2 - 1);
-                    State.hRotY = x * 2.5; State.hRotX = y * 1.5;
-
-                    const d = Math.hypot(lm[8].x - lm[0].x, lm[8].y - lm[0].y);
-                    elVal.innerText = d.toFixed(2); 
-
-                    if(d < 0.2) State.hZoom = 0.4;
-                    else if(d > 0.35) State.hZoom = 1.8;
-                    else State.hZoom = 1.0;
+                    if(Config.currentMode === 'classic') {
+                        if(Config.dualHand && res.multiHandLandmarks.length === 2) {
+                            const h1Wrist = res.multiHandLandmarks[0][0]; const h2Wrist = res.multiHandLandmarks[1][0]; const h1Tip = res.multiHandLandmarks[0][8]; const h2Tip = res.multiHandLandmarks[1][8];
+                            const wristDist = Math.hypot(h1Wrist.x - h2Wrist.x, h1Wrist.y - h2Wrist.y); const tipDist = Math.hypot(h1Tip.x - h2Tip.x, h1Tip.y - h2Tip.y);
+                            const isClasped = (wristDist < 0.2 && tipDist < 0.2); const isWideOpen = (Math.abs(h1Wrist.x - h2Wrist.x) > 0.65);
+                            if(isWideOpen) { State.isExploding = true; State.isImploding = false; if(elVal) { elVal.innerText = "大撕裂 WARNING"; elVal.className = "value warn"; } } 
+                            else if(isClasped) { State.isExploding = false; State.isImploding = true; if(elVal) { elVal.innerText = "奇点重塑 REBIRTH"; elVal.className = "value accent"; } } 
+                            else { State.isExploding = false; State.isImploding = false; if(elVal) { elVal.innerText = "Dual Control"; elVal.className = "value"; } }
+                        } else {
+                            State.isExploding = false; State.isImploding = false;
+                            const lm = res.multiHandLandmarks[0];
+                            const x = (1 - lm[8].x) * 2 - 1; const y = -(lm[8].y * 2 - 1);
+                            State.hRotY = x * 2.5; State.hRotX = y * 1.5;
+                            const d = Math.hypot(lm[8].x - lm[0].x, lm[8].y - lm[0].y);
+                            if(elVal) { elVal.innerText = d.toFixed(2); elVal.className = "value"; }
+                            const inMin = 0.05; const inMax = 0.4; const dClamped = Math.max(inMin, Math.min(inMax, d));
+                            let zoom = (dClamped - inMin) * (Config.maxZoom - Config.minZoom) / (inMax - inMin) + Config.minZoom;
+                            State.hZoom = zoom;
+                        }
+                    } 
+                    else if(Config.currentMode === 'chronos') {
+                         let rightHand = null; let leftHand = null;
+                        for(let lm of res.multiHandLandmarks) { if(lm[0].x < 0.5) rightHand = lm; else leftHand = lm; }
+                        if(leftHand) { const y = leftHand[8].y; if(y > 0.8) Config.timeScale = 0.001; else if(y < 0.2) Config.timeScale = 50.0; else { Config.timeScale = 1.0 + (0.5 - y) * 10; if(Config.timeScale < 0.1) Config.timeScale = 0.1; } if(elVal) { elVal.innerText = "TIME CTRL"; elVal.className = "value accent"; } }
+                        if(rightHand) { const x = (1 - rightHand[8].x) * 2 - 1; const y = -(rightHand[8].y * 2 - 1); State.hRotY = x * 3.0; State.hRotX = y * 2.0; }
+                    }
+                    else if(Config.currentMode === 'vortex') {
+                        State.vortexTargets = [];
+                        for(let lm of res.multiHandLandmarks) {
+                            const x = (1 - lm[8].x) * 2 - 1; const y = -(lm[8].y * 2 - 1);
+                            State.vortexTargets.push({x, y});
+                        }
+                        if(elVal) { elVal.innerText = "VORTEX ACTIVE"; elVal.className = "value accent"; }
+                    }
                 } else {
                     State.hasHand = false;
-                    // 中文状态
-                    elSrc.innerText = "触控 / 鼠标";
-                    elSrc.className = "value inactive";
+                    State.isExploding = false; State.isImploding = false; State.vortexTargets = [];
+                    if(Config.currentMode === 'chronos') Config.timeScale = 1.0;
+                    if(elSrc) { elSrc.innerText = "触控 / 鼠标"; elSrc.className = "value inactive"; }
                 }
             }
         };
