@@ -3,9 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DeepSpace: Nexus Core (GHP)</title>
-    
-    <!-- 强制使用 HTTPS 安全连接 -->
+    <title>DeepSpace: Nexus Core (V33.5)</title>
     <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
 
     <style>
@@ -18,9 +16,10 @@
         }
         canvas { display: block; }
         
+        /* 视频层必须存在，不能 display:none */
         #input_video { 
             position: absolute; top: 0; left: 0; 
-            width: 1px; height: 1px; opacity: 0; pointer-events: none; z-index: -1; 
+            width: 120px; height: 90px; opacity: 0; pointer-events: none; z-index: -1; 
         }
 
         /* --- 1. 入场动画 --- */
@@ -61,14 +60,11 @@
         }
         #menu-btn:active { transform: scale(0.9); }
 
-        /* --- 3. 菜单面板 --- */
+        /* --- 3. 菜单面板 (完全回滚到 V33.2 的固定高度逻辑) --- */
         #menu-panel {
             position: absolute; top: -10px; left: -10px; width: 320px; 
-            /* ★★★ 修复：不再写死高度，而是适应屏幕 ★★★ */
-            height: auto; 
-            max-height: 85vh; /* 确保底部不会被切掉 */
-            
-            background: rgba(10, 10, 15, 0.7); 
+            height: 750px; /* 固定高度，保持原来手感 */
+            background: rgba(10, 10, 15, 0.65); 
             backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
             border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 24px; 
             transform-origin: 32px 32px; 
@@ -76,30 +72,42 @@
             transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease;
             box-shadow: 0 30px 60px rgba(0,0,0,0.6);
             overflow: hidden; 
-            display: flex; /* 使用 flex 布局确保内容撑开 */
-            flex-direction: column;
         }
         #ui-layer.active #menu-panel { transform: scale(1); opacity: 1; pointer-events: auto; }
         #ui-layer.active #menu-btn { opacity: 0; pointer-events: none; transform: scale(0.8); }
 
-        /* 视图容器 - 修复滚动 */
+        /* 视图容器 (内部滚动，解决日志看不见的问题) */
         .view-container {
-            position: relative; /* 改为相对定位 */
-            width: 100%; 
-            flex: 1; /* 占满剩余空间 */
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             padding: 24px;
-            display: none; /* 默认不显示 */
-            flex-direction: column;
-            overflow-y: auto; /* 允许内部滚动 */
-            
-            /* 隐藏滚动条 */
-            scrollbar-width: none; 
-            -ms-overflow-style: none;
+            display: flex; flex-direction: column;
+            transition: transform 0.3s ease, opacity 0.3s ease, visibility 0.3s;
+            background: transparent; 
+            overflow-y: auto; /* ★关键：内容超出时内部滚动 */
         }
-        .view-container::-webkit-scrollbar { display: none; }
+        /* 隐藏滚动条但保留功能 */
+        .view-container::-webkit-scrollbar { width: 0; }
 
-        .view-active { display: flex; animation: fadeIn 0.3s ease; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        .view-hidden { 
+            transform: translateX(100%); 
+            opacity: 0; 
+            visibility: hidden; 
+            pointer-events: none; 
+            z-index: 0; 
+        }
+        .view-active { 
+            transform: translateX(0); 
+            opacity: 1; 
+            visibility: visible; 
+            pointer-events: auto; 
+            z-index: 10; 
+        }
+        .view-slide-left {
+            transform: translateX(-30%);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
 
         .header { 
             display: flex; justify-content: space-between; align-items: center; 
@@ -182,18 +190,11 @@
 
         .about-info { font-size: 12px; color: #ddd; line-height: 1.6; margin-bottom: 15px; flex-shrink: 0; }
         
-        /* ★★★ 修复：强制给日志区域高度，防止被切掉 ★★★ */
         .log-scroller {
-            min-height: 200px; /* 强制最小高度 */
-            flex: 1; 
-            overflow-y: auto; 
-            padding-right: 8px; margin-bottom: 5px;
+            flex: 1; min-height: 200px; /* 确保有足够高度 */
             border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;
-            background: rgba(0,0,0,0.2); border-radius: 8px; /* 加个深色背景方便看 */
+            margin-bottom: 40px; /* 底部留白 */
         }
-        .log-scroller::-webkit-scrollbar { width: 4px; }
-        .log-scroller::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
-        .log-scroller::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
         
         .log-item { font-size: 11px; color: #888; margin-bottom: 12px; padding-left: 10px; border-left: 2px solid #333; line-height: 1.4; }
         .log-ver { color: #00e5ff; font-weight: bold; margin-right: 5px; display: block; margin-bottom: 2px; font-size: 12px; }
@@ -202,6 +203,7 @@
             position: fixed; bottom: 20px; left: 20px; width: calc(100% - 40px);
             background: rgba(255,0,0,0.2); color: #ff5555; padding: 10px; font-size: 10px;
             display: none; border-radius: 8px; pointer-events: none; text-align: center;
+            z-index: 99999;
         }
     </style>
 
@@ -214,7 +216,7 @@
 <body>
 
     <div id="loader">
-        <div class="loader-text">NEXUS ENGINE</div>
+        <div class="loader-text">NEXUS CORE</div>
         <div class="loader-line"><div class="loader-fill" id="load-bar"></div></div>
     </div>
     
@@ -253,7 +255,6 @@
                     <span class="label">输入模式</span>
                     <span class="value inactive" id="disp-source">触控 / 鼠标</span>
                 </div>
-                <!-- AI 源显示 -->
                 <div class="row">
                     <span class="label">AI 线路</span>
                     <span class="value" id="disp-net">正在探测...</span>
@@ -284,7 +285,7 @@
             </div>
 
             <!-- 2. 星系选择 -->
-            <div id="view-galaxy" class="view-container">
+            <div id="view-galaxy" class="view-container view-hidden">
                 <div class="sub-header" onclick="UI.switchView('main')">
                     <span class="back-icon">‹</span> 返回主控台
                 </div>
@@ -301,7 +302,7 @@
             </div>
 
             <!-- 3. 玩法选择 -->
-            <div id="view-modes" class="view-container">
+            <div id="view-modes" class="view-container view-hidden">
                 <div class="sub-header" onclick="UI.switchView('main')">
                     <span class="back-icon">‹</span> 返回主控台
                 </div>
@@ -320,7 +321,7 @@
             </div>
 
             <!-- 4. 设置界面 -->
-            <div id="view-settings" class="view-container">
+            <div id="view-settings" class="view-container view-hidden">
                 <div class="sub-header" onclick="UI.switchView('main')">
                     <span class="back-icon">‹</span> 返回主控台
                 </div>
@@ -353,21 +354,20 @@
             </div>
 
             <!-- 5. 关于界面 -->
-            <div id="view-about" class="view-container">
+            <div id="view-about" class="view-container view-hidden">
                 <div class="sub-header" onclick="UI.switchView('main')">
                     <span class="back-icon">‹</span> 返回主控台
                 </div>
                 <div class="section-title">开发者信息</div>
                 <div class="about-info">
                     Lead Developer：<b>lanstian</b><br>
-                    Engine Core：DeepSpace V33.4 (GHP)<br>
+                    Engine Core：DeepSpace V33.5<br>
                     Stack：WebGL / Three.js / MediaPipe
                 </div>
                 
-                <div class="section-title">开发编年史 (Full History)</div>
-                <!-- ★★★ 全量日志恢复 ★★★ -->
+                <div class="section-title">开发编年史</div>
                 <div class="log-scroller">
-                    <div class="log-item"><span class="log-ver">V33.4 (GHP)</span> GitHub Pages 专版：修复小屏幕日志被切断问题；优化菜单高度适配；增强 CSS 布局兼容性。</div>
+                    <div class="log-item"><span class="log-ver">V33.5</span> UI回滚：恢复 V33.2 版本的经典菜单交互（固定高度+物理变换）；解决日志显示不全问题；强化 GitHub Pages 上的摄像头权限获取逻辑。</div>
                     <div class="log-item"><span class="log-ver">V33.3 (Nexus Core)</span> 界面修正：主标题更名，AI源增加中文镜像说明；全量恢复从 V1.0 至今的开发日志。</div>
                     <div class="log-item"><span class="log-ver">V33.2</span> 修复菜单层级覆盖 Bug，优化切换动画。</div>
                     <div class="log-item"><span class="log-ver">V33.1</span> 修复虚空漩涡逻辑中断；恢复状态监控面板。</div>
@@ -523,14 +523,28 @@
                     about: document.getElementById('view-about')
                 };
 
-                // 先隐藏所有
+                // V33.2 经典交互逻辑：全部隐藏，然后只激活一个
                 Object.values(views).forEach(v => {
-                    if(v) v.classList.remove('view-active');
+                    if(v) {
+                        v.classList.remove('view-active', 'view-slide-left');
+                        v.classList.add('view-hidden');
+                    }
                 });
 
-                // 显示目标
-                if(views[targetId]) {
-                    views[targetId].classList.add('view-active');
+                if(targetId === 'main') {
+                    if(views.main) {
+                        views.main.classList.remove('view-hidden');
+                        views.main.classList.add('view-active');
+                    }
+                } else {
+                    if(views.main) {
+                        views.main.classList.remove('view-hidden');
+                        views.main.classList.add('view-slide-left');
+                    }
+                    if(views[targetId]) {
+                        views[targetId].classList.remove('view-hidden');
+                        views[targetId].classList.add('view-active');
+                    }
                 }
             },
 
@@ -564,12 +578,13 @@
             },
 
             logErr: (msg) => {
-                // 忽略外部 React 报错
-                if(msg && msg.includes && (msg.includes('main.7ee886d8.js') || msg.includes('react'))) return;
+                // 忽略非核心错误
+                if(msg && (msg.includes('main.7ee886d8.js') || msg.includes('react'))) return;
                 const elErr = document.getElementById('err-log');
                 if(elErr) {
                     elErr.style.display = 'block';
                     elErr.innerText = "Error: " + msg;
+                    console.error("DeepSpace Error:", msg);
                 }
             }
         };
@@ -868,8 +883,8 @@
         // ================= 5. AI 网络 =================
         const Network = {
             sources: [
-                { name: 'UNPKG (官方源)', url: 'https://unpkg.com/@mediapipe/hands/' },
-                { name: 'JSDELIVR (国内镜像)', url: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' }
+                { name: 'JSDELIVR (镜像)', url: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' },
+                { name: 'UNPKG (官方)', url: 'https://unpkg.com/@mediapipe/hands/' }
             ],
 
             async init() {
@@ -879,6 +894,7 @@
                 let bestSrc = this.sources[0];
                 let minPing = 9999;
                 
+                // 简单的 Ping 测试
                 for(let src of this.sources) {
                     const start = performance.now();
                     try {
@@ -887,7 +903,8 @@
                         if(ping < minPing) { minPing = ping; bestSrc = src; }
                     } catch(e) {}
                 }
-
+                
+                // ★ 强制优先使用第一个源（通常 JSDELIVR 在国内更稳）如果都失败了
                 if (minPing === 9999) bestSrc = this.sources[0];
                 if(elNet) elNet.innerText = bestSrc.name;
 
@@ -906,7 +923,8 @@
                         onFrame: async () => {
                             if(Config.aiEnabled) await hands.send({image: vid});
                         },
-                        facingMode: 'user'
+                        facingMode: 'user',
+                        width: 640, height: 480 // 尝试指定分辨率，有助于触发
                     });
                     if(Config.aiEnabled) this.startCamera(cam);
                     
@@ -924,15 +942,24 @@
 
             startCamera(cam) {
                 if(cam) this.cameraInstance = cam;
-                if(this.cameraInstance) this.cameraInstance.start();
-                const elNet = document.getElementById('disp-net');
-                if(elNet) { elNet.innerText = "AI 视觉引擎：ON"; elNet.style.color = "#00ffaa"; }
+                if(this.cameraInstance) {
+                    this.cameraInstance.start()
+                    .then(() => {
+                        const elNet = document.getElementById('disp-net');
+                        if(elNet) { elNet.innerText = "AI ON"; elNet.style.color = "#00ffaa"; }
+                    })
+                    .catch(e => {
+                        const elNet = document.getElementById('disp-net');
+                        if(elNet) { elNet.innerText = "CAM ERROR"; elNet.style.color = "#ff0000"; }
+                        UI.logErr("Cam: " + e.message);
+                    });
+                }
             },
 
             stopCamera() {
                 if(this.cameraInstance) this.cameraInstance.stop();
                 const elNet = document.getElementById('disp-net');
-                if(elNet) { elNet.innerText = "AI 视觉引擎：OFF"; elNet.style.color = "#557799"; }
+                if(elNet) { elNet.innerText = "AI OFF"; elNet.style.color = "#557799"; }
                 State.hasHand = false;
             },
 
