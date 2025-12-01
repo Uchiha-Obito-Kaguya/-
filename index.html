@@ -13,13 +13,13 @@
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { 
             margin: 0; background: #020202; overflow: hidden; 
-            font-family: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif; 
+            font-family: -apple-system, "SF Pro Display", "PingFang SC", sans-serif; 
             color: #fff; user-select: none;
         }
         canvas { display: block; }
         #input_video { display: none; }
 
-        /* --- 1. 入场动画 --- */
+        /* --- 1. 入场动画 (英文 - 保持逼格) --- */
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; z-index: 9999;
@@ -64,7 +64,12 @@
             border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; padding: 28px;
             transform-origin: 32px 32px; 
             transform: scale(0.4); opacity: 0; pointer-events: none;
-            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease;
+            
+            /* 丝滑非线性动画 */
+            transition: 
+                transform 0.6s cubic-bezier(0.19, 1, 0.22, 1),
+                opacity 0.4s ease;
+            
             box-shadow: 0 30px 60px rgba(0,0,0,0.5);
         }
 
@@ -76,6 +81,7 @@
             margin-bottom: 25px; padding-bottom: 12px;
             border-bottom: 1px solid rgba(255,255,255,0.08);
         }
+        /* 标题保持英文 */
         .title { 
             font-size: 14px; font-weight: 800; letter-spacing: 2px; 
             background: linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%);
@@ -103,7 +109,7 @@
         }
     </style>
 
-    <!-- ★★★ 核心修复：改用 unpkg.com (全球通用源) 解决 403 和 超时问题 ★★★ -->
+    <!-- ★★★ 核心修复：Unpkg 源 ★★★ -->
     <script src="https://unpkg.com/three@0.128.0/build/three.min.js" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
@@ -111,6 +117,7 @@
 </head>
 <body>
 
+    <!-- 1. 开场动画：保留英文 -->
     <div id="loader">
         <div class="loader-text">NEXUS ENGINE</div>
         <div class="loader-line"><div class="loader-fill" id="load-bar"></div></div>
@@ -122,34 +129,39 @@
         <div id="menu-btn" onclick="UI.toggle()"></div>
         <div id="menu-panel">
             <div class="header">
+                <!-- 2. 标题：保留英文 -->
                 <span class="title">NEXUS CORE</span>
                 <span class="close" onclick="UI.toggle()">CLOSE</span>
             </div>
+            
+            <!-- 3. 内容：使用中文 -->
             <div class="row">
-                <span class="label">INPUT MODE</span>
-                <span class="value inactive" id="disp-source">TOUCH / MOUSE</span>
+                <span class="label">输入模式</span>
+                <span class="value inactive" id="disp-source">触控 / 鼠标</span>
             </div>
             <div class="row">
-                <span class="label">AI NODE</span>
-                <span class="value" id="disp-net">AUTO SELECT...</span>
+                <span class="label">AI 节点</span>
+                <span class="value" id="disp-net">自动优选...</span>
             </div>
             <div class="row">
-                <span class="label">LATENCY</span>
+                <span class="label">网络延迟</span>
                 <span class="value" id="disp-ping">-- ms</span>
             </div>
-            <div class="section-title">TELEMETRY</div>
+            
+            <div class="section-title">实时监控</div>
             <div class="row">
-                <span class="label">REFRESH RATE</span>
+                <span class="label">刷新率</span>
                 <span class="value" id="disp-fps">-- Hz</span>
             </div>
             <div class="row">
-                <span class="label">TENSION</span>
+                <span class="label">手势张力</span>
                 <span class="value" id="disp-val">0.00</span>
             </div>
-            <div class="section-title">COMMANDS</div>
-            <div class="guide-row"><span>DRAG</span> <span>ROTATE VIEW</span></div>
-            <div class="guide-row"><span>FIST</span> <span>COLLAPSE</span></div>
-            <div class="guide-row"><span>PALM</span> <span>EXPAND</span></div>
+            
+            <div class="section-title">操作指令</div>
+            <div class="guide-row"><span>单指拖动</span> <span>旋转视角</span></div>
+            <div class="guide-row"><span>握拳</span> <span>引力坍缩</span></div>
+            <div class="guide-row"><span>张开手掌</span> <span>宇宙膨胀</span></div>
         </div>
     </div>
 
@@ -354,10 +366,8 @@
         }
         animate(0);
 
-        // ================= 3. AI 网络 (修复 403 / 404 / 跨域问题) =================
+        // ================= 3. AI 网络 (Unpkg) =================
         const Network = {
-            // ★★★ 核心修改：只使用 UNPKG 全球源，放弃所有国内源 ★★★
-            // 国内源要么防盗链(403)，要么缺文件(404)，Unpkg 是唯一稳的
             sources: [
                 { name: 'UNPKG (GLOBAL)', url: 'https://unpkg.com/@mediapipe/hands/' },
                 { name: 'JSDELIVR', url: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' }
@@ -377,14 +387,13 @@
                         await fetch(src.url + 'hands_solution_packed_assets_loader.js', {method:'HEAD'});
                         const ping = Math.round(performance.now() - start);
                         if(ping < minPing) { minPing = ping; bestSrc = src; }
-                    } catch(e) { console.log(src.name + " timeout"); }
+                    } catch(e) { console.log(src.name + " failed"); }
                 }
-                
-                // 如果所有测速都失败，强制使用 UNPKG
-                if(minPing === 9999) bestSrc = this.sources[0];
 
+                if (minPing === 9999) bestSrc = this.sources[0];
+                
                 elNet.innerText = bestSrc.name;
-                elPing.innerText = minPing < 9999 ? minPing + " ms" : "SLOW";
+                elPing.innerText = minPing < 9999 ? minPing + " ms" : "TIMEOUT";
 
                 try {
                     const hands = new Hands({locateFile: f => bestSrc.url + f});
@@ -395,14 +404,14 @@
                     hands.onResults(this.onRes);
 
                     const vid = document.getElementById('input_video');
-                    // 确保 Safari 不报错
+                    // Safari 兼容
                     const cam = new Camera(vid, {
                         onFrame: async () => await hands.send({image: vid}),
                         facingMode: 'user'
                     });
                     await cam.start();
                 } catch(e) {
-                    elNet.innerText = "FAILED";
+                    elNet.innerText = "加载失败";
                     UI.logErr(e.message);
                 }
             },
@@ -413,7 +422,8 @@
                 
                 if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
                     State.hasHand = true;
-                    elSrc.innerText = "AI HANDS";
+                    // 中文状态
+                    elSrc.innerText = "AI 手势接管";
                     elSrc.className = "value accent";
 
                     const lm = res.multiHandLandmarks[0];
@@ -429,7 +439,8 @@
                     else State.hZoom = 1.0;
                 } else {
                     State.hasHand = false;
-                    elSrc.innerText = "TOUCH / MOUSE";
+                    // 中文状态
+                    elSrc.innerText = "触控 / 鼠标";
                     elSrc.className = "value inactive";
                 }
             }
