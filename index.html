@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DeepSpace</title>
+    <title>DeepSpace: Nexus Core (GHP)</title>
     
-    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
+    <!-- 强制使用 HTTPS 安全连接 -->
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
 
     <style>
         /* --- 0. 全局设置 --- */
@@ -63,7 +64,10 @@
         /* --- 3. 菜单面板 --- */
         #menu-panel {
             position: absolute; top: -10px; left: -10px; width: 320px; 
-            height: 780px; 
+            /* ★★★ 修复：不再写死高度，而是适应屏幕 ★★★ */
+            height: auto; 
+            max-height: 85vh; /* 确保底部不会被切掉 */
+            
             background: rgba(10, 10, 15, 0.7); 
             backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
             border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 24px; 
@@ -72,40 +76,30 @@
             transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease;
             box-shadow: 0 30px 60px rgba(0,0,0,0.6);
             overflow: hidden; 
+            display: flex; /* 使用 flex 布局确保内容撑开 */
+            flex-direction: column;
         }
         #ui-layer.active #menu-panel { transform: scale(1); opacity: 1; pointer-events: auto; }
         #ui-layer.active #menu-btn { opacity: 0; pointer-events: none; transform: scale(0.8); }
 
-        /* 视图容器 - Flexbox 重构 */
+        /* 视图容器 - 修复滚动 */
         .view-container {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            position: relative; /* 改为相对定位 */
+            width: 100%; 
+            flex: 1; /* 占满剩余空间 */
             padding: 24px;
-            display: flex; flex-direction: column;
-            transition: transform 0.3s ease, opacity 0.3s ease, visibility 0.3s;
-            background: transparent; 
+            display: none; /* 默认不显示 */
+            flex-direction: column;
+            overflow-y: auto; /* 允许内部滚动 */
+            
+            /* 隐藏滚动条 */
+            scrollbar-width: none; 
+            -ms-overflow-style: none;
         }
+        .view-container::-webkit-scrollbar { display: none; }
 
-        /* 隐藏/显示状态管理 */
-        .view-hidden { 
-            transform: translateX(100%); 
-            opacity: 0; 
-            visibility: hidden; 
-            pointer-events: none; 
-            z-index: 0; 
-        }
-        .view-active { 
-            transform: translateX(0); 
-            opacity: 1; 
-            visibility: visible; 
-            pointer-events: auto; 
-            z-index: 10; 
-        }
-        .view-slide-left {
-            transform: translateX(-30%);
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
+        .view-active { display: flex; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
 
         .header { 
             display: flex; justify-content: space-between; align-items: center; 
@@ -188,9 +182,14 @@
 
         .about-info { font-size: 12px; color: #ddd; line-height: 1.6; margin-bottom: 15px; flex-shrink: 0; }
         
+        /* ★★★ 修复：强制给日志区域高度，防止被切掉 ★★★ */
         .log-scroller {
-            flex: 1; overflow-y: auto; min-height: 0; padding-right: 8px; margin-bottom: 5px;
+            min-height: 200px; /* 强制最小高度 */
+            flex: 1; 
+            overflow-y: auto; 
+            padding-right: 8px; margin-bottom: 5px;
             border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;
+            background: rgba(0,0,0,0.2); border-radius: 8px; /* 加个深色背景方便看 */
         }
         .log-scroller::-webkit-scrollbar { width: 4px; }
         .log-scroller::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
@@ -229,7 +228,6 @@
             <!-- 1. 主界面 -->
             <div id="view-main" class="view-container view-active">
                 <div class="header">
-                    <!-- ★★★ 改名：NEXUS CORE ★★★ -->
                     <span class="title">NEXUS CORE</span>
                     <span class="close" onclick="UI.toggle()">关闭</span>
                 </div>
@@ -286,7 +284,7 @@
             </div>
 
             <!-- 2. 星系选择 -->
-            <div id="view-galaxy" class="view-container view-hidden">
+            <div id="view-galaxy" class="view-container">
                 <div class="sub-header" onclick="UI.switchView('main')">
                     <span class="back-icon">‹</span> 返回主控台
                 </div>
@@ -303,7 +301,7 @@
             </div>
 
             <!-- 3. 玩法选择 -->
-            <div id="view-modes" class="view-container view-hidden">
+            <div id="view-modes" class="view-container">
                 <div class="sub-header" onclick="UI.switchView('main')">
                     <span class="back-icon">‹</span> 返回主控台
                 </div>
@@ -322,7 +320,7 @@
             </div>
 
             <!-- 4. 设置界面 -->
-            <div id="view-settings" class="view-container view-hidden">
+            <div id="view-settings" class="view-container">
                 <div class="sub-header" onclick="UI.switchView('main')">
                     <span class="back-icon">‹</span> 返回主控台
                 </div>
@@ -355,23 +353,24 @@
             </div>
 
             <!-- 5. 关于界面 -->
-            <div id="view-about" class="view-container view-hidden">
+            <div id="view-about" class="view-container">
                 <div class="sub-header" onclick="UI.switchView('main')">
                     <span class="back-icon">‹</span> 返回主控台
                 </div>
                 <div class="section-title">开发者信息</div>
                 <div class="about-info">
-                    Lead Developer：<b>Lanstian</b><br>
-                    Engine Core：DeepSpace V33.3<br>
+                    Lead Developer：<b>lanstian</b><br>
+                    Engine Core：DeepSpace V33.4 (GHP)<br>
                     Stack：WebGL / Three.js / MediaPipe
                 </div>
                 
                 <div class="section-title">开发编年史 (Full History)</div>
                 <!-- ★★★ 全量日志恢复 ★★★ -->
                 <div class="log-scroller">
+                    <div class="log-item"><span class="log-ver">V33.4 (GHP)</span> GitHub Pages 专版：修复小屏幕日志被切断问题；优化菜单高度适配；增强 CSS 布局兼容性。</div>
                     <div class="log-item"><span class="log-ver">V33.3 (Nexus Core)</span> 界面修正：主标题更名，AI源增加中文镜像说明；全量恢复从 V1.0 至今的开发日志。</div>
                     <div class="log-item"><span class="log-ver">V33.2</span> 修复菜单层级覆盖 Bug，优化切换动画。</div>
-                    <div class="log-item"><span class="log-ver">V33.1</span> 修复虚空漩涡模式启动逻辑；恢复状态监控面板。</div>
+                    <div class="log-item"><span class="log-ver">V33.1</span> 修复虚空漩涡逻辑中断；恢复状态监控面板。</div>
                     <div class="log-item"><span class="log-ver">V33.0</span> 紧急修复：找回丢失的输入模式和双手开关。</div>
                     <div class="log-item"><span class="log-ver">V32.0 (Dimensional)</span> 玩法爆发：新增“时空领主”与“虚空漩涡”操控法则。</div>
                     <div class="log-item"><span class="log-ver">V31.0 (Infinite)</span> 视觉升级：新增“无尽星海”背景，生成 30,000+ 永久背景星。</div>
@@ -524,27 +523,14 @@
                     about: document.getElementById('view-about')
                 };
 
+                // 先隐藏所有
                 Object.values(views).forEach(v => {
-                    if(v) {
-                        v.classList.remove('view-active', 'view-slide-left');
-                        v.classList.add('view-hidden');
-                    }
+                    if(v) v.classList.remove('view-active');
                 });
 
-                if(targetId === 'main') {
-                    if(views.main) {
-                        views.main.classList.remove('view-hidden');
-                        views.main.classList.add('view-active');
-                    }
-                } else {
-                    if(views.main) {
-                        views.main.classList.remove('view-hidden');
-                        views.main.classList.add('view-slide-left');
-                    }
-                    if(views[targetId]) {
-                        views[targetId].classList.remove('view-hidden');
-                        views[targetId].classList.add('view-active');
-                    }
+                // 显示目标
+                if(views[targetId]) {
+                    views[targetId].classList.add('view-active');
                 }
             },
 
@@ -578,6 +564,8 @@
             },
 
             logErr: (msg) => {
+                // 忽略外部 React 报错
+                if(msg && msg.includes && (msg.includes('main.7ee886d8.js') || msg.includes('react'))) return;
                 const elErr = document.getElementById('err-log');
                 if(elErr) {
                     elErr.style.display = 'block';
@@ -879,7 +867,6 @@
 
         // ================= 5. AI 网络 =================
         const Network = {
-            // ★★★ 核心修复：更名明确源用途 ★★★
             sources: [
                 { name: 'UNPKG (官方源)', url: 'https://unpkg.com/@mediapipe/hands/' },
                 { name: 'JSDELIVR (国内镜像)', url: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' }
@@ -930,7 +917,7 @@
             },
 
             updateOptions() {
-                // 简化逻辑，避免复杂引用
+                // 简化逻辑
             },
 
             cameraInstance: null,
