@@ -1,939 +1,468 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>集成电路科学与工程学院暑期实习日志</title>
-    <!-- 外部资源 -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
-    
-    <!-- Tailwind 配置 -->
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#165DFF',
-                        secondary: '#FF6B00',
-                        dark: '#1D2939',
-                        light: '#F9FAFB'
-                    },
-                    fontFamily: {
-                        inter: ['Inter', 'system-ui', 'sans-serif'],
-                    },
-                }
-            }
+    <!-- 核心：禁止缩放，适配刘海屏 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>DeepSpace: Nexus</title>
+    <style>
+        /* --- 0. 全局设置 --- */
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { 
+            margin: 0; background: #020202; overflow: hidden; 
+            /* 使用 Apple 系统字体，更贴合 Safari */
+            font-family: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif; 
+            color: #fff; user-select: none;
         }
-    </script>
-    
-    <style type="text/tailwindcss">
-    @layer utilities {
-        .card-hover {
-            transition: all 0.3s ease;
+        canvas { display: block; }
+        
+        /* 关键：防止 iOS 视频全屏 */
+        #input_video { 
+            display: none; 
+            position: absolute; top: 0; left: 0; 
         }
-        .card-hover:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+
+        /* --- 1. 入场动画 --- */
+        #loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: opacity 0.8s ease; pointer-events: none;
         }
-        .modal-enter {
-            opacity: 0;
-            transform: scale(0.95);
+        #loader.done { opacity: 0; }
+        .loader-text { 
+            font-size: 14px; letter-spacing: 6px; margin-bottom: 20px; font-weight: 600;
+            background: linear-gradient(135deg, #fff 0%, #aaddff 100%);
+            -webkit-background-clip: text; color: transparent;
         }
-        .modal-enter-active {
-            opacity: 1;
-            transform: scale(1);
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        .loader-line { width: 120px; height: 1px; background: #222; position: relative; overflow: hidden; }
+        .loader-fill { 
+            position: absolute; top: 0; left: 0; width: 0%; height: 100%; background: #fff; 
+            transition: width 0.2s linear; box-shadow: 0 0 15px #fff;
         }
-        .backdrop-blur-md {
-            backdrop-filter: blur(8px);
+
+        /* --- 2. 菜单按钮 --- */
+        #ui-layer { position: absolute; top: 30px; left: 30px; z-index: 1000; }
+        
+        #menu-btn {
+            width: 44px; height: 44px; /* 加大触控区适配手指 */
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
         }
-        #back-to-top {
-            transition: all 0.3s ease;
+        #menu-btn::after {
+            content: ''; width: 6px; height: 6px; background: #fff; border-radius: 50%;
+            box-shadow: 0 0 10px rgba(255,255,255,0.8);
+            transition: background 0.3s;
         }
-        #back-to-top:hover {
-            transform: translateY(-3px);
-        }
-        /* 原有日志切换动画样式 */
-        .journal-transition {
-            transition: opacity 0.3s ease, filter 0.4s ease;
-        }
-        .journal-fade-out {
-            opacity: 0;
-            filter: blur(5px);
-        }
-        .journal-fade-in {
-            opacity: 1;
-            filter: blur(0);
-        }
-        /* 新增折叠内容动画样式 */
-        .collapse-transition {
-            transition: max-height 0.7s ease, opacity 0.5s ease;
-            overflow: hidden;
-            max-height: 0;
-            opacity: 0;
-        }
-        .collapse-open {
-            max-height: 2000px;
-            opacity: 1;
-        }
-        /* 箭头触发器样式 */
-        .backdrop-blur-sm {
-            backdrop-filter: blur(4px);
-        }
-        .max-h-1800 {
-            max-height: 1800px;
-        }
-        .nav-indicator {
-            position: absolute;
+        #menu-btn:active { transform: scale(0.9); }
+
+        /* --- 3. 菜单面板 (高斯模糊+大圆角) --- */
+        #menu-panel {
+            position: absolute; top: -10px; left: -10px;
+            width: 280px;
+            /* 深度磨砂质感 */
+            background: rgba(15, 15, 20, 0.75); 
+            backdrop-filter: blur(50px); -webkit-backdrop-filter: blur(50px); /* 模糊度拉满 */
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            /* 大圆角 */
+            border-radius: 24px; 
+            padding: 28px;
+            
+            transform-origin: 32px 32px; 
+            transform: scale(0.4); opacity: 0; 
             pointer-events: none;
-            background-color: rgba(22, 93, 255, 0.2);
-            backdrop-filter: blur(8px); /* 高斯模糊效果 */
-            border-radius: 999px; /* 圆角矩形 */
-            transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-            z-index: 5;
+            
+            /* iOS 风格的弹簧动画 */
+            transition: 
+                transform 0.6s cubic-bezier(0.19, 1, 0.22, 1),
+                opacity 0.4s ease;
+            
+            box-shadow: 0 30px 60px rgba(0,0,0,0.5);
         }
-    }
-</style>
+
+        #ui-layer.active #menu-panel { transform: scale(1); opacity: 1; pointer-events: auto; }
+        #ui-layer.active #menu-btn { opacity: 0; pointer-events: none; transform: scale(0.8); }
+
+        /* --- 4. 菜单排版 --- */
+        .header { 
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 25px; padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        
+        /* 彩色英文标题 */
+        .title { 
+            font-size: 14px; font-weight: 800; letter-spacing: 2px; 
+            /* 渐变流光文字 */
+            background: linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%);
+            -webkit-background-clip: text; color: transparent;
+            text-transform: uppercase;
+            animation: hue-flow 8s infinite linear;
+        }
+        
+        .close { font-size: 11px; color: rgba(255,255,255,0.4); cursor: pointer; padding: 4px; }
+        .close:hover { color: #fff; }
+
+        .row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 12px; align-items: center; }
+        .label { color: rgba(255,255,255,0.5); font-weight: 500; }
+        .value { color: #ddd; font-family: "SF Mono", "Menlo", monospace; letter-spacing: -0.5px; } 
+        
+        .value.accent { color: #00ffaa; font-weight: 600; text-shadow: 0 0 12px rgba(0,255,170,0.4); } 
+        .value.inactive { color: #557799; }
+
+        .section-title { 
+            font-size: 10px; color: rgba(255,255,255,0.3); margin-top: 24px; margin-bottom: 10px; 
+            letter-spacing: 1px; text-transform: uppercase; font-weight: 700;
+        }
+        
+        .guide-row { 
+            display: flex; justify-content: space-between; margin-bottom: 8px; 
+            font-size: 11px; color: rgba(255,255,255,0.6); 
+        }
+
+        @keyframes hue-flow { 0%{filter: hue-rotate(0deg);} 100%{filter: hue-rotate(360deg);} }
+    </style>
+
+    <!-- 基础库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
-<body class="font-inter bg-light text-dark">
-    <!-- 导航栏 -->
-    <nav id="navbar" class="fixed w-full z-50 bg-white/90 backdrop-blur-sm shadow-sm transition-all duration-300">
-        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
-            <div class="flex items-center">
-                <i class="fa fa-car text-primary text-2xl mr-2"></i>
-                <span class="text-xl font-bold">电子卡丁车开发日志</span>
-            </div>
-            <div class="hidden md:flex space-x-8">
-                <a href="#home" class="hover:text-primary transition-colors">首页</a>
-                <a href="#team" class="hover:text-primary transition-colors">团队成员</a>
-                <a href="#journal" class="hover:text-primary transition-colors">实习日志</a>
-                <a href="#summary" class="hover:text-primary transition-colors">项目总结</a>
-            </div>
-            <button id="mobile-menu-btn" class="md:hidden text-dark">
-                <i class="fa fa-bars text-xl"></i>
-            </button>
-        </div>
-        <!-- 移动端菜单 -->
-        <div id="mobile-menu" class="md:hidden hidden bg-white shadow-md absolute w-full">
-            <div class="container mx-auto px-4 py-3 flex flex-col space-y-3">
-                <a href="#home" class="py-2 hover:text-primary transition-colors">首页</a>
-                <a href="#team" class="py-2 hover:text-primary transition-colors">团队成员</a>
-                <a href="#journal" class="py-2 hover:text-primary transition-colors">实习日志</a>
-                <a href="#summary" class="py-2 hover:text-primary transition-colors">项目总结</a>
-            </div>
-        </div>
-    </nav>
+<body>
 
-    <!-- 首页区域 -->
-    <section id="home" class="relative h-screen flex items-center">
-        <div class="absolute inset-0 z-0">
-            <img src="https://images.hdqwalls.com/download/xiaomi-su7-ultra-prototype-hl-3840x2160.jpg" alt="电子卡丁车" class="w-full h-full object-cover">
-            <div class="absolute inset-0 bg-dark/60"></div>
-        </div>
-        <div class="container mx-auto px-4 relative z-10 text-white">
-            <h1 class="text-[clamp(2.5rem,5vw,4rem)] font-bold mb-6 leading-tight">
-                电子卡丁车自主开发<br>实习日志
-            </h1>
-            <p class="text-xl mb-8 max-w-2xl">
-                记录十四天从三电系统开发到整车架构组装的完整过程
-            </p>
-            <div class="flex flex-wrap gap-4">
-                <a href="#team" class="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg transition-all">
-                    认识团队
-                </a>
-                <a href="#journal" class="bg-white/10 hover:bg-white/20 text-white border border-white/30 px-6 py-3 rounded-lg transition-all">
-                    查看日志
-                </a>
-            </div>
-        </div>
-    </section>
+    <!-- 载入层 -->
+    <div id="loader">
+        <div class="loader-text">NEXUS ENGINE</div>
+        <div class="loader-line"><div class="loader-fill" id="load-bar"></div></div>
+    </div>
 
-    <!-- 团队成员 -->
-    <section id="team" class="py-20 bg-white">
-        <div class="container mx-auto px-4">
-            <div class="text-center mb-16">
-                <h2 class="text-[clamp(1.8rem,3vw,2.5rem)] font-bold mb-4">团队成员</h2>
-                <div class="w-20 h-1 bg-primary mx-auto mb-6"></div>
-                <p class="text-gray-600 max-w-2xl mx-auto">
-                    五名来自不同专业的成员，共同完成电子卡丁车的开发项目
-                </p>
+    <!-- 交互 UI -->
+    <div id="ui-layer">
+        <div id="menu-btn" onclick="UI.toggle()"></div>
+        
+        <div id="menu-panel">
+            <div class="header">
+                <!-- 彩色英文标题 -->
+                <span class="title">NEXUS CORE</span>
+                <span class="close" onclick="UI.toggle()">CLOSE</span>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
-                <!-- 成员1 -->
-                <div class="team-card card-hover bg-white rounded-xl shadow-md overflow-hidden cursor-pointer" data-id="1">
-                    <div class="relative">
-                        <img src="data:image/webp;base64,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" alt="兰云皓" class="w-full h-64 object-cover">
-                        <div class="absolute inset-0 bg-primary/70 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <button class="view-details bg-white text-primary px-4 py-2 rounded-lg transform translate-y-4 hover:translate-y-0 transition-all">
-                                查看详情
-                            </button>
-                        </div>
-                    </div>
-                    <div class="p-6">
-                        <h3 class="text-xl font-bold mb-1">兰云皓</h3>
-                        <p class="text-primary">项目负责人&电池开发</p>
-                    </div>
-                </div>
-
-                <!-- 成员2 -->
-                <div class="team-card card-hover bg-white rounded-xl shadow-md overflow-hidden cursor-pointer" data-id="2">
-                    <div class="relative">
-                        <img src="https://picsum.photos/id/1012/400/400" alt="章渝忠" class="w-full h-64 object-cover">
-                        <div class="absolute inset-0 bg-primary/70 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <button class="view-details bg-white text-primary px-4 py-2 rounded-lg transform translate-y-4 hover:translate-y-0 transition-all">
-                                查看详情
-                            </button>
-                        </div>
-                    </div>
-                    <div class="p-6">
-                        <h3 class="text-xl font-bold mb-1">章渝忠</h3>
-                        <p class="text-primary">电驱设计</p>
-                    </div>
-                </div>
-
-                <!-- 成员3 -->
-                <div class="team-card card-hover bg-white rounded-xl shadow-md overflow-hidden cursor-pointer" data-id="3">
-                    <div class="relative">
-                        <img src="https://ts4.tc.mm.bing.net/th/id/OIP-C.f41M5Ja2OMzyJw62nvHfGQHaEK?r=0&rs=1&pid=ImgDetMain&o=7&rm=3" alt="潘昱昇" class="w-full h-64 object-cover">
-                        <div class="absolute inset-0 bg-primary/70 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <button class="view-details bg-white text-primary px-4 py-2 rounded-lg transform translate-y-4 hover:translate-y-0 transition-all">
-                                查看详情
-                            </button>
-                        </div>
-                    </div>
-                    <div class="p-6">
-                        <h3 class="text-xl font-bold mb-1">潘昱昇</h3>
-                        <p class="text-primary">电池开发</p>
-                    </div>
-                </div>
-
-                <!-- 成员4 -->
-                <div class="team-card card-hover bg-white rounded-xl shadow-md overflow-hidden cursor-pointer" data-id="4">
-                    <div class="relative">
-                        <img src="https://picsum.photos/id/1074/400/400" alt="11" class="w-full h-64 object-cover">
-                        <div class="absolute inset-0 bg-primary/70 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <button class="view-details bg-white text-primary px-4 py-2 rounded-lg transform translate-y-4 hover:translate-y-0 transition-all">
-                                查看详情
-                            </button>
-                        </div>
-                    </div>
-                    <div class="p-6">
-                        <h3 class="text-xl font-bold mb-1">李孟林</h3>
-                        <p class="text-primary">电控设计</p>
-                    </div>
-                </div>
-
-                <!-- 成员5 -->
-                <div class="team-card card-hover bg-white rounded-xl shadow-md overflow-hidden cursor-pointer" data-id="5">
-                    <div class="relative">
-                        <img src="https://picsum.photos/id/1062/400/400" alt="赵敏" class="w-full h-64 object-cover">
-                        <div class="absolute inset-0 bg-primary/70 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <button class="view-details bg-white text-primary px-4 py-2 rounded-lg transform translate-y-4 hover:translate-y-0 transition-all">
-                                查看详情
-                            </button>
-                        </div>
-                    </div>
-                    <div class="p-6">
-                        <h3 class="text-xl font-bold mb-1">何欣隆</h3>
-                        <p class="text-primary">电控设计</p>
-                    </div>
-                </div>
+            <div class="row">
+                <span class="label">输入模式</span>
+                <span class="value inactive" id="disp-source">TOUCH / MOUSE</span>
             </div>
-        </div>
-    </section>
-
-    <!-- 实习日志 -->
-    <section id="journal" class="py-20 bg-gray-50">
-        <div class="container mx-auto px-4">
-            <div class="text-center mb-16">
-                <h2 class="text-[clamp(1.8rem,3vw,2.5rem)] font-bold mb-4">实习日志</h2>
-                <div class="w-20 h-1 bg-primary mx-auto mb-6"></div>
-                <p class="text-gray-600 max-w-2xl mx-auto">
-                    十四天开发过程的详细记录，点击日期切换查看
-                </p>
+            <div class="row">
+                <span class="label">AI 节点</span>
+                <span class="value" id="disp-net">AUTO SELECT...</span>
+            </div>
+            <div class="row">
+                <span class="label">线路延迟</span>
+                <span class="value" id="disp-ping">-- ms</span>
+            </div>
+            
+            <div class="section-title">实时遥测</div>
+            <div class="row">
+                <span class="label">刷新率</span>
+                <span class="value" id="disp-fps">-- Hz</span>
+            </div>
+            <div class="row">
+                <span class="label">手势张力</span>
+                <span class="value" id="disp-val">0.00</span>
             </div>
 
-            <!-- 日志导航 -->
-            <div class="relative flex flex-wrap justify-center gap-3 mb-12"> <!-- 添加relative -->
-                <button class="journal-nav bg-primary text-white px-5 py-2 rounded-full" data-day="1">Day 1</button>
-                <div class="nav-indicator" id="navIndicator"></div>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="2">Day 2</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="3">Day 3</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="4">Day 4</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="5">Day 5</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="6">Day 6</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="7">Day 7</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="8">Day 8</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="9">Day 9</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="10">Day 10</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="11">Day 11</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="12">Day 12</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="13">Day 13</button>
-                <button class="journal-nav bg-white text-primary hover:bg-primary/10 px-5 py-2 rounded-full transition-colors" data-day="14">Day 14</button>
-            </div>
-
-            <!-- 日志内容 -->
-            <div class="journal-content max-w-4xl mx-auto">
-                <!-- 第1天 -->
-                <div class="journal-entry active bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="1">
-                    <h3 class="text-2xl font-bold mb-2">项目启动与安全讲座</h3>
-                    <p class="text-gray-500 mb-6">第一天（7月5日）</p>
-                    <p class="mb-4">今天是项目启动的第一天，团队成员首次正式会面，明确了项目目标和整体计划。学院的老师为我们讲解了实习的各方面注意事项。我们的电子卡丁车开发分为两个主要阶段：前七天完成三点系统（电驱系统、电控系统、电池系统）的开发，后七天进行整车架构组装与调试。</p>
-                    <p class="mb-4">下午进行了任务分配，确定了每个人的职责范围。</p>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                        <img src="https://picsum.photos/id/180/600/400" alt="项目启动会议" class="w-full h-48 object-cover rounded-lg">
-                        <img src="https://picsum.photos/id/119/600/400" alt="系统架构图" class="w-full h-48 object-cover rounded-lg">
-                        <img src="https://picsum.photos/id/201/600/400" alt="团队讨论" class="w-full h-48 object-cover rounded-lg">
-                    </div>
-                </div>
-
-                <!-- 第2天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="2">
-                    <h3 class="text-2xl font-bold mb-2">整车方案设计</h3>
-                    <p class="text-gray-500 mb-6">第二天（7月6日）</p>
-                    <p class="mb-4">清晨九点左右，我们搭乘大巴启程前往峨眉校区，午后便马不停蹄地展开实地走访调研。本次调研旨在通过沉浸式体验建立对校园生活的同理心，精准定义师生日常出行中的真实问题...</p>
-                    
-                    <!-- 包裹详细内容（默认折叠部分） -->
-                    <div class="more-details overflow-hidden max-h-56 opacity-100 transition-all duration-1000 ease-in-out">
-                        <p class="mb-4">走访过程中，我们先后实地考察了 6201 教室、院士楼、电机馆、行政楼、操场、名山电影场、风雨操场、200 米铁轨、图书馆及生活超市，逐一明确了各地点的具体方位。调研期间，我们针对性采访了三位不同身份的校园成员，聚焦出行方式相关问题展开深入交流；同时细致观察并记录了各区域的人流量、通行交通工具类型、行人行进速度、途中遇到的障碍及人们的面部表情等细节。加之数小时徒步快速穿梭校园的亲身体验，我们对师生群体在电动车使用方面的实际需求形成了深刻认知。
-                        从采访中了解到，峨眉校区因地处山区，频繁出现的陡坡与长阶梯给日常出行带来显著困扰：自行车在此类地形中安全性欠佳，电动车则面临跨越地形的实际难题，尤其在雨天，路面打滑等问题更为突出。
-                        实地走访结束后，各组间开展了心得分享会，充分交换调研信息与思考成果。其中部分小组还得到学校院士的亲切接待，就电动车相关专业知识进行了深入交流。
-                        当晚，在老师的指导下，我们完成了本组 gitee 仓库的创建，为后续实习工作搭建了基础平台；同时制作了专属网站，用于介绍团队情况及记录实习全过程。</p>
-                        <p class="mb-4">今天重点讨论了动力系统的设计方案。经过比较直流电机、交流电机和无刷电机的优缺点，我们最终选择了有刷刷直流电机作为驱动方案，因为它具有高效率、长寿命和良好的调速性能。团队完成了电机参数的计算和选型，初步确定电压12V的方案。同时，我们也开始研究电池组的配置，计划采用21700锂电池组成12V的电池组。</p>
-                    
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                            <img src="https://s21.ax1x.com/2025/07/08/pVQpe2T.jpg" alt="电机选型" class="w-full h-72 object-cover rounded-lg">
-                            <img src="https://s21.ax1x.com/2025/07/08/pVQpZGV.jpg" alt="电池组设计" class="w-full h-72 object-cover rounded-lg">
-                            <img src="https://s21.ax1x.com/2025/07/08/pVQpuMF.jpg" alt="电池组设计" class="w-full h-72 object-cover rounded-lg">
-                            <img src="https://s21.ax1x.com/2025/07/08/pVQpmxU.jpg" alt="电池组设计" class="w-full h-72 object-cover rounded-lg">
-                        </div>
-                    </div>
-                    
-                    <!-- 高斯模糊箭头触发器（展开/折叠按钮） -->
-                    <div class="expand-trigger flex justify-center items-center mt-4 cursor-pointer group">
-                        <div class="w-12 h-12 rounded-full bg-primary/10 backdrop-blur-sm flex items-center justify-center transition-all duration-300 group-hover:bg-primary/20">
-                            <i class="fa fa-chevron-down text-primary text-xl transition-transform duration-700 transform"></i>
-                        </div>
-                    </div>
-                </div>
-               <!-- 第3天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="3">
-                    <h3 class="text-2xl font-bold mb-2">三电系统原理了解</h3>
-                    <p class="text-gray-500 mb-6">第三天（7月7日）</p>
-                    <p class="mb-4">上午，我们领取了制作电车所需要的物料，以及对相关物料的基础理论了解。下午，我们组制作了单节锂电池充电器的制作，及使用直流电源驱动电机正反转。</p>
-                    
-                    <!-- 包裹详细内容（默认折叠部分） -->
-                    <div class="more-details overflow-hidden max-h-56 opacity-100 transition-all duration-1000 ease-in-out">
-                        <p class="mb-4">附加电池原理，电池我们将采用三串两并的结构，因为一块电池提供大约4V的电压，那么三节串联起来就可以提供12V的电压，在并联就可以使电流加倍来提供稳定的动力，连接保护板时则从负极（B-）开始连接。</p>
-                        <p class="mb-4">电池组：制作了两个单节21700电芯的充电器，并对保护板，INA219有了一定的了解。</p>
-                        <p class="mb-4">电驱组：早上听老师讲解ppt，我们了解了电控的工作原理，然后老师给我们介绍了搭建电控系统的各个操作步骤，我们仔细地聆听然后下来认真看了课件附上的链接里的视频和文件，了解了电控系统的大概搭建过程。理论学习后，我们开始搭建开发环境。首先下载安装了Arduino IDE集成开发环境，并根据开发板型号安装了对应的支持包。在配置过程中，我们学习了驱动安装、端口选择等实用技巧。为验证环境配置，我们参考官方文档编写了Blink测试程序，然后连接线路进行测试，最后完成了测试。</p>
-                        <p class="mb-4">电控组：早上听老师讲解ppt，了解了电控的每一部分应该做一些什么事情，然后我们开始下载Arduino IDE并安装支持包，借助网上的资料，写了Blink测试的代码，然后连接线路，完成测试。</p>
-                        
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                            <img src="https://tse2-mm.cn.bing.net/th/id/OIP-C.i_srMnzBlgVzFQeKXSK2yQHaFV?w=208&h=180&c=7&r=0&o=5&dpr=2&pid=1.7" alt="电路原理图" class="w-full h-72 object-cover rounded-lg">
-                            <img src="https://ts1.tc.mm.bing.net/th/id/R-C.141b4a47241d904de94daaf5199fcbce?rik=SKrV6OVmg%2faJbg&riu=http%3a%2f%2fcbu01.alicdn.com%2fimg%2fibank%2f2020%2f984%2f188%2f20328881489_1480940240.jpg&ehk=qv5O6GGLVb9IUViyeIEj6V1ZklFO%2b5A7VWue1jQondI%3d&risl=&pid=ImgRaw&r=0" alt="元件选型表" class="w-full h-72 object-cover rounded-lg">
-                        </div>
-                    </div>
-                    
-                    <!-- 高斯模糊箭头触发器（展开/折叠按钮） -->
-                    <div class="expand-trigger flex justify-center items-center mt-4 cursor-pointer group">
-                        <div class="w-12 h-12 rounded-full bg-primary/10 backdrop-blur-sm flex items-center justify-center transition-all duration-300 group-hover:bg-primary/20">
-                            <i class="fa fa-chevron-down text-primary text-xl transition-transform duration-700 transform"></i>
-                        </div>
-                    </div>
-                </div>
-                <!-- 第4天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="4">
-                    <h3 class="text-2xl font-bold mb-2">三电系统各自初步开发</h3>
-                    <p class="text-gray-500 mb-6">第四天（7月8日）</p>
-                    <p class="mb-4">完成双层PCB的布线工作，重点优化电源层与地层的分割，设置差分对阻抗匹配，确保信号完整性。通过DFM工具检查焊盘间距、过孔大小等制造规则，修正3处潜在短路风险，导出Gerber文件准备打样。</p>
-                    
-                    <!-- 包裹详细内容（默认折叠部分） -->
-                    <div class="more-details overflow-hidden max-h-56 opacity-100 transition-all duration-1000 ease-in-out">
-                        <p class="mb-4">电池组：完成了六节电芯的组装，用点焊连接了六节电芯和保护板，并使用12V充电器对电池组进行充电。</p>
-                        <p class="mb-4">电驱组：上午：继续昨天的连线任务，理论上认为合理，使用嘉立创绘制了电路图.下午：编写代码，并根据电路图将开发板、电机驱动和驱动电机连接在一起，进行了驱动尝试，取得了一定的成功。</p>
-                        <p class="mb-4">电驱组：上午借助网上的资料，写了代码并连接了线路，完成了OLED测试和电位器测试，OLED屏幕能显示出内容，电位器也能调节档位，并将油门剥线了接线。下午将油门、OLED、电位器接在一起进行测试，OLED屏幕能显示油门、电位器的工作状态，完成测试。</p>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                            <img src="https://s21.ax1x.com/2025/07/08/pVMzbt0.jpg" alt="PCB布线图" class="w-full h-72 object-cover rounded-lg">
-                            <img src="https://s21.ax1x.com/2025/07/08/pVMzX1U.png" alt="DFM报告截图" class="w-full h-72 object-cover rounded-lg">
-                            <img src="https://s21.ax1x.com/2025/07/08/pVMzHkq.jpg" alt="PCB布线图" class="w-full h-72 object-cover rounded-lg">
-                            <img src="https://s21.ax1x.com/2025/07/08/pVMzqhV.jpg" alt="DFM报告截图" class="w-full h-72 object-cover rounded-lg">
-                        </div>
-                    </div>
-                    
-                    <!-- 高斯模糊箭头触发器（展开/折叠按钮） -->
-                    <div class="expand-trigger flex justify-center items-center mt-4 cursor-pointer group">
-                        <div class="w-12 h-12 rounded-full bg-primary/10 backdrop-blur-sm flex items-center justify-center transition-all duration-300 group-hover:bg-primary/20">
-                            <i class="fa fa-chevron-down text-primary text-xl transition-transform duration-700 transform"></i>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 第5天 -->
-               <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="5">
-                    <h3 class="text-2xl font-bold mb-2">各系统深入开发与三电系统初步整合</h3>
-                    <p class="text-gray-500 mb-6">第五天（7月9日）</p>
-                    <p class="mb-4">今日，项目研发工作取得阶段性重要进展，其中电驱系统与电控系统的初步结合尤为关键，这一突破不仅标志着两大核心模块的协同工作迈出了实质性一步，更为后续整体系统的联调与优化筑牢了基础。</p>
-                    
-                    <!-- 包裹详细内容（默认折叠部分） -->
-                    <div class="more-details overflow-hidden max-h-56 opacity-100 transition-all duration-1000 ease-in-out">
-                        <p class="mb-4">电池组工作进展</p>  
-                        <p class="mb-4">今日，电池组相关工作按计划高效推进，为系统稳定运行提供了坚实的能源保障。为确保供电可靠性，项目专门安排经验丰富的人员驻守一楼充电区，严格遵循电池充放电规范开展充电管理，实时监测电池温度、电压等关键指标，避免过充过放，确保电池组始终处于最佳工作状态。  
-
-                        与此同时，团队通过远程协作模式，顺利完成电池开关的焊接作业，并随即开展全面测试，包括导通性检测与耐压试验，结果均符合预设标准。此外，3.3V DC-DC稳压模块的调试工作圆满完成，实测输出电压稳定，纹波系数低，可充分满足后续低功耗器件的供电需求。  
-
-                        由Esp32与INA219组成的测量系统调试也取得突破性进展。经过反复校准与优化，该系统已能精准采集电压与电流数据，数据精度与稳定性均达到设计要求，为后续系统能耗分析、能源管理策略优化提供了可靠的数据支撑。  
-                        </p>
-
-                        <p class="mb-4">电驱组工作进展  
-                        <p class="mb-4">电驱团队今日聚焦核心功能调试，在与电控团队的协同配合中实现关键突破。上午，团队技术人员详细梳理了驱动模块的核心功能与设计思路，重点向电控团队阐述了电驱系统的功率输出特性、马达驱动逻辑及硬件保护机制，包括器件工作原理、信号传输路径及负载响应特性等关键细节，为双方技术衔接奠定了清晰的认知基础。  
-
-                        基于与电控团队达成的技术共识，电驱团队迅速投入到系统联调中，针对油门控制、转速调节等核心功能开展测试。通过实时监测电路波形、优化驱动参数，确保马达在接收电控信号后能精准响应：踩下油门踏板时，马达可按比例输出对应扭矩；调节电位器时，转速能实现平滑变化，无明显波动。截至下午，电驱系统各项硬件性能指标均达到预期，为与电控系统的深度融合提供了可靠的硬件支撑。  
-                        </p>
-
-                        <p class="mb-4">电控组工作进展  
-                        <p class="mb-4">电控团队今日以系统控制逻辑实现为核心，通过跨团队协作推动电控功能落地。上午，团队与电驱团队开展深入技术交流，明确了控制代码的编写规范、接口协议及数据交互逻辑，重点梳理了控制算法的架构设计、参数阈值及信号处理流程，确保软件逻辑与硬件特性高度匹配。  
-
-                        随后，电控团队基于共识开展控制代码的编写与调试，同步优化信号采集、指令输出及参数显示等模块。通过逐行调试代码逻辑、迭代优化算法，成功实现了对电驱系统的精准控制：一方面，将油门踏板信号、电位器调节信号转化为稳定的控制指令，驱动马达按预期运行；另一方面，完成OLED显示屏的驱动逻辑开发，实现系统转速、电压、电流等关键参数的实时显示，数据更新及时、准确。  
-
-                        截至当日工作结束，电控系统已实现与电驱系统的初步协同，控制响应速度与稳定性均达到设计目标，为后续全系统联调奠定了坚实的软件基础。
-                        </p>
-                        
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                            <img src="https://s21.ax1x.com/2025/07/09/pVQKkd0.jpg" alt="软件架构图" class="w-full h-48 object-cover rounded-lg">
-                            <img src="https://s21.ax1x.com/2025/07/09/pVQKMLR.jpg" alt="RTOS任务调度图" class="w-full h-48 object-cover rounded-lg">
-                            <img src="https://s21.ax1x.com/2025/07/09/pVQK1dx.jpg" alt="RTOS任务调度图" class="w-full h-48 object-cover rounded-lg">
-                            <img src="https://s21.ax1x.com/2025/07/09/pVQKle1.png" alt="RTOS任务调度图" class="w-full h-48 object-cover rounded-lg">
-                        </div>
-                    </div>
-                    
-                    <!-- 高斯模糊箭头触发器 -->
-                    <div class="expand-trigger flex justify-center items-center mt-4 cursor-pointer group">
-                        <div class="w-12 h-12 rounded-full bg-primary/10 backdrop-blur-sm flex items-center justify-center transition-all duration-300 group-hover:bg-primary/20">
-                            <i class="fa fa-chevron-down text-primary text-xl transition-transform duration-700 transform"></i>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 第6天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="6">
-                    <h3 class="text-2xl font-bold mb-2">传感器集成与校准</h3>
-                    <p class="text-gray-500 mb-6">第六天（7月10日）</p>
-                    <p class="mb-4">完成霍尔速度传感器、电流传感器及温度传感器的硬件安装，编写校准程序，通过标准信号源验证测量精度。</p>
-                    <p class="mb-4">对温度传感器进行冷热箱标定，绘制校准曲线，优化软件滤波算法，将测量误差控制在±0.5℃以内。</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                        <img src="https://picsum.photos/id/789/600/400" alt="传感器安装位置" class="w-full h-48 object-cover rounded-lg">
-                        <img src="https://picsum.photos/id/890/600/400" alt="校准数据曲线" class="w-full h-48 object-cover rounded-lg">
-                    </div>
-                </div>
-
-                <!-- 第7天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="7">
-                    <h3 class="text-2xl font-bold mb-2">车载通信模块开发</h3>
-                    <p class="text-gray-500 mb-6">第七天（7月11日）</p>
-                    <p class="mb-4">设计CAN总线通信协议，定义电机控制、传感器数据等8种帧类型，编写串口透传程序实现上位机监控。</p>
-                    <p class="mb-4">搭建通信测试环境，验证模块间数据传输延迟（平均1.2ms），修复2处协议解析错误，保障数据可靠性。</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                        <img src="https://picsum.photos/id/901/600/400" alt="CAN协议帧结构" class="w-full h-48 object-cover rounded-lg">
-                        <img src="https://picsum.photos/id/102/600/400" alt="串口调试界面" class="w-full h-48 object-cover rounded-lg">
-                    </div>
-                </div>
-
-                <!-- 第8天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="8">
-                    <h3 class="text-2xl font-bold mb-2">电机控制算法设计</h3>
-                    <p class="text-gray-500 mb-6">第八天（7月12日）</p>
-                    <p class="mb-4">推导PID调速算法并加入前馈补偿，仿真验证在突加负载时的响应速度（超调量≤5%），设计扭矩控制策略。</p>
-                    <p class="mb-4">针对低附路面，加入轮速差判别与防打滑逻辑，通过MATLAB仿真验证算法有效性，规划代码移植方案。</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                        <img src="https://picsum.photos/id/203/600/400" alt="PID控制框图" class="w-full h-48 object-cover rounded-lg">
-                        <img src="https://picsum.photos/id/304/600/400" alt="扭矩控制流程图" class="w-full h-48 object-cover rounded-lg">
-                    </div>
-                </div>
-
-                <!-- 第9天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="9">
-                    <h3 class="text-2xl font-bold mb-2">原型机组装与硬件调试</h3>
-                    <p class="text-gray-500 mb-6">第九天（7月13日）</p>
-                    <p class="mb-4">完成PCB板焊接，连接无刷电机、18650电池组及传感器，搭建最小系统并首次通电，测量各模块工作电压。</p>
-                    <p class="mb-4">通过示波器观测PWM波形与电源纹波，发现电机驱动电路一处虚焊，修复后验证电源稳定性（纹波≤100mV）。</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                        <img src="https://picsum.photos/id/405/600/400" alt="原型机组装过程" class="w-full h-48 object-cover rounded-lg">
-                        <img src="https://picsum.photos/id/506/600/400" alt="示波器电源波形" class="w-full h-48 object-cover rounded-lg">
-                    </div>
-                </div>
-
-                <!-- 第10天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="10">
-                    <h3 class="text-2xl font-bold mb-2">系统功能初步测试</h3>
-                    <p class="text-gray-500 mb-6">第十天（7月14日）</p>
-                    <p class="mb-4">测试电机正反转、转速连续调节功能，验证传感器数据采集（速度、电流、温度）的实时性，通信链路丢包率≤0.1%。</p>
-                    <p class="mb-4">发现电机在低速段（≤500rpm）存在轻微抖动，初步判断为PWM频率匹配问题，规划后续优化方向。</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                        <img src="https://picsum.photos/id/607/600/400" alt="电机测试场景" class="w-full h-48 object-cover rounded-lg">
-                        <img src="https://picsum.photos/id/708/600/400" alt="传感器数据监测界面" class="w-full h-48 object-cover rounded-lg">
-                    </div>
-                </div>
-
-                <!-- 第11天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="11">
-                    <h3 class="text-2xl font-bold mb-2">测试问题排查与分析</h3>
-                    <p class="text-gray-500 mb-6">第十一天（7月15日）</p>
-                    <p class="mb-4">定位电机低速抖动原因：PWM频率与电机谐振频率接近（20kHz），调整频率至30kHz后抖动幅度降低80%。</p>
-                    <p class="mb-4">处理电流传感器噪声（加入RC滤波电路，截止频率1kHz），解决CAN通信丢包（增加120Ω终端电阻），验证问题修复。</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                        <img src="https://picsum.photos/id/809/600/400" alt="电机抖动波形对比" class="w-full h-48 object-cover rounded-lg">
-                        <img src="https://picsum.photos/id/910/600/400" alt="噪声频谱分析图" class="w-full h-48 object-cover rounded-lg">
-                    </div>
-                </div>
-
-                <!-- 第12天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="12">
-                    <h3 class="text-2xl font-bold mb-2">系统优化与迭代</h3>
-                    <p class="text-gray-500 mb-6">第十二天（7月16日）</p>
-                    <p class="mb-4">优化PID控制参数（增加微分环节，Kd=0.1），使转速响应时间缩短至200ms，超调量降至3%以内。</p>
-                    <p class="mb-4">硬件增加TVS管防护（抑制浪涌电压），软件加入滑动平均滤波算法，提升系统稳定性与抗干扰能力。</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                        <img src="https://picsum.photos/id/111/600/400" alt="优化后转速响应曲线" class="w-full h-48 object-cover rounded-lg">
-                        <img src="https://picsum.photos/id/212/600/400" alt="TVS管防护电路" class="w-full h-48 object-cover rounded-lg">
-                    </div>
-                </div>
-
-                <!-- 第13天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="13">
-                    <h3 class="text-2xl font-bold mb-2">整车系统联调</h3>
-                    <p class="text-gray-500 mb-6">第十三天（7月17日）</p>
-                    <p class="mb-4">开展软硬件协同测试，验证启动、加速、制动等整车功能，发现并修复3处逻辑漏洞（如制动优先级不足）。</p>
-                    <p class="mb-4">通过CAN总线实时监控系统状态，记录各模块工作数据，为最终性能测试提供基准参考。</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                        <img src="https://picsum.photos/id/313/600/400" alt="整车测试场景" class="w-full h-48 object-cover rounded-lg">
-                        <img src="https://picsum.photos/id/414/600/400" alt="联调数据监控界面" class="w-full h-48 object-cover rounded-lg">
-                    </div>
-                </div>
-
-                <!-- 第14天 -->
-                <div class="journal-entry hidden bg-white rounded-xl shadow-lg p-6 md:p-8 journal-transition" data-day="14">
-                    <h3 class="text-2xl font-bold mb-2">最终验收测试与总结</h3>
-                    <p class="text-gray-500 mb-6">第十四天（7月18日）</p>
-                    <p class="mb-4">完成续航（满电续航25km）、极速（45km/h）、制动距离（≤3m）等性能测试，各项指标符合设计要求。</p>
-                    <p class="mb-4">整理项目文档（原理图、代码、测试报告），复盘过程中的技术难点与解决方案，规划后续迭代方向。</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                        <img src="https://picsum.photos/id/515/600/400" alt="性能测试报告截图" class="w-full h-48 object-cover rounded-lg">
-                        <img src="https://picsum.photos/id/616/600/400" alt="项目总结会议" class="w-full h-48 object-cover rounded-lg">
-                    </div>
-                </div>
-
-                <!-- 第3-14天日志结构类似，此处省略 -->
-            </div>
-        </div>
-    </section>
-
-    <!-- 项目总结 -->
-    <section id="summary" class="py-20 bg-white">
-        <div class="container mx-auto px-4">
-            <div class="text-center mb-16">
-                <h2 class="text-[clamp(1.8rem,3vw,2.5rem)] font-bold mb-4">项目总结</h2>
-                <div class="w-20 h-1 bg-primary mx-auto mb-6"></div>
-                <p class="text-gray-600 max-w-2xl mx-auto">
-                    十四天电子卡丁车开发的成果与经验
-                </p>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-                <div>
-                    <h3 class="text-2xl font-bold mb-6">开发成果</h3>
-                    <p class="mb-6">经过十四天的紧张开发，我们成功完成了电子卡丁车的从无到有，实现了预定的所有功能目标。</p>
-                    
-                    <div class="space-y-4">
-                        <div class="flex items-start">
-                            <i class="fa fa-check-circle text-primary mt-1 mr-3"></i>
-                            <div>
-                                <h4 class="font-semibold">三电系统功能完善</h4>
-                                <p class="text-gray-600">动力系统、控制系统和传感系统均达到设计指标</p>
-                            </div>
-                        </div>
-                        <div class="flex items-start">
-                            <i class="fa fa-check-circle text-primary mt-1 mr-3"></i>
-                            <div>
-                                <h4 class="font-semibold">整车组装完成</h4>
-                                <p class="text-gray-600">各系统集成良好，机械结构稳定可靠</p>
-                            </div>
-                        </div>
-                        <div class="flex items-start">
-                            <i class="fa fa-check-circle text-primary mt-1 mr-3"></i>
-                            <div>
-                                <h4 class="font-semibold">性能测试达标</h4>
-                                <p class="text-gray-600">最高速度50km/h，续航里程25km，满足设计要求</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div>
-                    <canvas id="performanceChart" width="400" height="300"></canvas>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- 底部信息区 -->
-    <footer class="bg-dark text-white py-12">
-        <div class="container mx-auto px-4">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-                <!-- 左侧品牌区 -->
-                <div>
-                    <div class="flex items-center space-x-2 mb-4">
-                        <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center">
-                            <i class="fa fa-car text-primary text-xl"></i>
-                        </div>
-                        <span class="text-xl font-bold">电子卡丁车<span class="text-primary">日志</span></span>
-                    </div>
-                    <p class="text-gray-400 mb-4">
-                        记录电子卡丁车从概念设计到原型实现的全过程，分享团队协作、技术挑战与解决方案。
-                    </p>
-                    <div class="flex space-x-4">
-                        <a href="#" class="text-gray-400 hover:text-white">
-                            <i class="fa fa-weixin text-xl"></i>
-                        </a>
-                        <a href="#" class="text-gray-400 hover:text-white">
-                            <i class="fa fa-weibo text-xl"></i>
-                        </a>
-                        <a href="#" class="text-gray-400 hover:text-white">
-                            <i class="fa fa-github text-xl"></i>
-                        </a>
-                        <a href="#" class="text-gray-400 hover:text-white">
-                            <i class="fa fa-linkedin text-xl"></i>
-                        </a>
-                    </div>
-                </div>
-
-                <!-- 快速链接 -->
-                <div>
-                    <h4 class="text-lg font-semibold mb-4">快速链接</h4>
-                    <ul class="space-y-2">
-                        <li><a href="#about" class="text-gray-400 hover:text-white">关于项目</a></li>
-                        <li><a href="#team" class="text-gray-400 hover:text-white">团队成员</a></li>
-                        <li><a href="#journal" class="text-gray-400 hover:text-white">实习日志</a></li>
-                        <li><a href="#summary" class="text-gray-400 hover:text-white">性能数据</a></li>
-                        <li><a href="#contact" class="text-gray-400 hover:text-white">联系我们</a></li>
-                    </ul>
-                </div>
-
-                <!-- 联系方式 -->
-                <div>
-                    <h4 class="text-lg font-semibold mb-4">联系方式</h4>
-                    <ul class="space-y-2">
-                        <li class="flex items-center">
-                            <i class="fa fa-map-marker text-primary mr-2"></i>
-                            <span class="text-gray-400">四川省成都市郫都区犀浦镇犀安路999号</span>
-                        </li>
-                        <li class="flex items-center">
-                            <i class="fa fa-phone text-primary mr-2"></i>
-                            <span class="text-gray-400">+86 177 1109 1185</span>
-                        </li>
-                        <li class="flex items-center">
-                            <i class="fa fa-envelope text-primary mr-2"></i>
-                            <span class="text-gray-400">contact@electric-kart.com</span>
-                        </li>
-                        <li class="flex items-center">
-                            <i class="fa fa-clock-o text-primary mr-2"></i>
-                            <span class="text-gray-400">周一至周五: 9:00 - 18:00</span>
-                        </li>
-                    </ul>
-                </div>
-
-                <!-- 订阅区 -->
-                <div>
-                    <h4 class="text-lg font-semibold mb-4">订阅更新</h4>
-                    <p class="text-gray-400 mb-4">
-                        订阅我们的通讯，获取项目最新进展和技术分享。
-                    </p>
-                    <form class="space-y-2">
-                        <input 
-                            type="email" 
-                            placeholder="您的邮箱地址" 
-                            class="w-full px-4 py-2 rounded-md bg-gray-800 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        >
-                        <button 
-                            type="submit" 
-                            class="w-full bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md transition-all"
-                        >
-                            订阅
-                        </button>
-                    </form>
-                </div>
-            </div>
-            <div class="mt-8 text-center text-gray-500 border-t border-gray-800 pt-4">
-                &copy; 2025 Lans电子卡丁车开发团队. 保留所有权利.
-            </div>
-        </div>
-    </footer>
-
-    <!-- 回到顶部按钮 -->
-    <button 
-        id="back-to-top" 
-        class="fixed bottom-8 right-8 bg-primary text-white rounded-full p-3 shadow-lg hover:shadow-xl transition-all hidden"
-    >
-        <i class="fa fa-angle-up text-xl"></i>
-    </button>
-
-    <!-- 团队成员详情模态框 -->
-    <div 
-        id="member-modal" 
-        class="fixed inset-0 bg-black/30 backdrop-blur-md flex items-center justify-center z-50 opacity-0 pointer-events-none transition-all duration-300"
-    >
-        <div class="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto m-4 transform scale-95 transition-all">
-            <div class="p-6 border-b">
-                <div class="flex justify-between items-center">
-                    <h3 class="text-2xl font-bold" id="modal-title">成员详情</h3>
-                    <button id="close-modal" class="text-gray-500 hover:text-gray-700">
-                        <i class="fa fa-times text-xl"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="p-6" id="modal-content">
-                <!-- 内容将通过JS填充 -->
-            </div>
+            <div class="section-title">操作指令</div>
+            <div class="guide-row"><span>单指拖动</span> <span>旋转视界</span></div>
+            <div class="guide-row"><span>握拳</span> <span>引力坍缩</span></div>
+            <div class="guide-row"><span>张开手掌</span> <span>宇宙膨胀</span></div>
         </div>
     </div>
 
-   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // 团队成员数据
-        const teamMembers = {
-            1: {
-                name: '兰云皓',
-                role: '项目负责人&电池开发',
-                image: 'data:image/webp;base64,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',
-                bio: '集成电路科学与工程学院学士。负责项目整体规划、进度管理和技术决策，协调各成员工作，确保项目按计划推进。',
-                skills: ['项目管理', '嵌入式系统', '技术决策', '团队协调']
+    <!-- 增加 playsinline 属性防止 iOS 全屏 -->
+    <video id="input_video" playsinline muted autoplay></video>
+
+    <!-- Shader 渲染核心 -->
+    <script type="x-shader/x-vertex" id="vertexShader">
+        attribute float size;
+        attribute vec3 customColor;
+        varying vec3 vColor;
+        void main() {
+            vColor = customColor;
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            gl_PointSize = size * (400.0 / -mvPosition.z);
+            gl_Position = projectionMatrix * mvPosition;
+        }
+    </script>
+    <script type="x-shader/x-fragment" id="fragmentShader">
+        uniform sampler2D tex;
+        varying vec3 vColor;
+        void main() {
+            gl_FragColor = vec4(vColor, 1.0) * texture2D(tex, gl_PointCoord);
+            if (gl_FragColor.a < 0.05) discard;
+        }
+    </script>
+
+    <script>
+        // ================= 全局状态 =================
+        const State = {
+            hasHand: false,
+            mRotX: 0, mRotY: 0, mZoom: 1, // 鼠标
+            hRotX: 0, hRotY: 0, hZoom: 1, // 手势
+            tRotX: 0, tRotY: 0, tZoom: 1  // 目标
+        };
+
+        const UI = {
+            el: document.getElementById('ui-layer'),
+            loader: document.getElementById('loader'),
+            bar: document.getElementById('load-bar'),
+            
+            toggle: () => {
+                document.getElementById('ui-layer').classList.toggle('active');
             },
-            2: {
-                name: '章渝忠',
-                role: '电驱设计',
-                image: 'https://picsum.photos/id/1012/400/400',
-                bio: '集成电路科学与工程学院学生，负责电机驱动技术。',
-                skills: ['电机驱动', ]
+            
+            intro: () => {
+                let p = 0;
+                const t = setInterval(() => {
+                    p += 2; UI.bar.style.width = p + '%';
+                    if(p>=100) {
+                        clearInterval(t);
+                        setTimeout(() => UI.loader.classList.add('done'), 200);
+                        Network.init(); 
+                    }
+                }, 20);
             },
-            3: {
-                name: '王芳',
-                role: '软件工程师',
-                image: 'https://picsum.photos/id/1027/400/400',
-                bio: '计算机科学专业硕士，擅长嵌入式软件开发和控制系统算法。负责卡丁车控制系统的软件开发，实现了电机控制、传感器数据处理和决策算法。',
-                skills: ['C/C++编程', '嵌入式软件', '控制算法', '传感器融合']
-            },
-            4: {
-                name: '李孟林',
-                role: '电控设计',
-                image: 'https://picsum.photos/id/1074/400/400',
-                bio: '集成电路科学与工程学院学生，负责电路控制技术',
-                skills: ['电路控制']
-            },
-            5: {
-                name: '何欣隆',
-                role: '电控设计',
-                image: 'https://picsum.photos/id/1062/400/400',
-                bio: '集成电路科学与工程学院学生，负责电路控制技术',
-                skills: ['电路控制']
+
+            updateMonitor: (fps, handVal) => {
+                document.getElementById('disp-fps').innerText = fps + " Hz";
+                if(handVal !== null) document.getElementById('disp-val').innerText = handVal.toFixed(2);
             }
         };
 
-        // 模态框元素
-        const modal = document.getElementById('member-modal');
-        const modalTitle = document.getElementById('modal-title');
-        const modalContent = document.getElementById('modal-content');
-        const closeModal = document.getElementById('close-modal');
+        // ================= 1. 输入系统 =================
+        function initInput() {
+            let isDown = false, lx = 0, ly = 0;
+            const move = (x, y) => {
+                if(!isDown) return;
+                const dx = (x - lx) * 0.005; const dy = (y - ly) * 0.005;
+                State.mRotY += dx; State.mRotX += dy; lx = x; ly = y;
+            };
+            const zoom = (d) => {
+                State.mZoom += d * 0.001; State.mZoom = Math.max(0.2, Math.min(3.0, State.mZoom));
+            };
+            window.addEventListener('mousedown', e => { isDown=true; lx=e.clientX; ly=e.clientY; });
+            window.addEventListener('mouseup', () => isDown=false);
+            window.addEventListener('mousemove', e => move(e.clientX, e.clientY));
+            window.addEventListener('wheel', e => zoom(e.deltaY), {passive:true});
+            window.addEventListener('touchstart', e => { if(e.touches.length==1){ isDown=true; lx=e.touches[0].clientX; ly=e.touches[0].clientY; } }, {passive:true});
+            window.addEventListener('touchend', () => isDown=false);
+            window.addEventListener('touchmove', e => { if(e.touches.length==1) move(e.touches[0].clientX, e.touches[0].clientY); }, {passive:true});
+        }
+        initInput();
 
-        // 显示模态框（带柔滑动画）
-        function showModal(member) {
-            modalTitle.textContent = member.name;
-            modalContent.innerHTML = `
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div class="md:col-span-1">
-                        <img src="${member.image}" alt="${member.name}" class="w-full h-64 object-cover rounded-lg shadow-md">
-                    </div>
-                    <div class="md:col-span-2">
-                        <p class="text-xl text-primary mb-4">${member.role}</p>
-                        <p class="mb-6">${member.bio}</p>
-                        
-                        <h4 class="font-semibold text-lg mb-3">专业技能</h4>
-                        <div class="flex flex-wrap gap-2">
-                            ${member.skills.map(skill => `
-                                <span class="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm">${skill}</span>
-                            `).join('')}
-                        </div>
-                    </div>
-                </div>
-            `;
-            modal.classList.add('opacity-100', 'pointer-events-auto', 'scale-100');
-            modal.classList.remove('opacity-0', 'pointer-events-none', 'scale-95');
+        // ================= 2. 渲染引擎 =================
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x020202, 0.015);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        camera.position.z = 45;
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        function createTex() {
+            const c = document.createElement('canvas'); c.width=64; c.height=64;
+            const ctx = c.getContext('2d');
+            const g = ctx.createRadialGradient(32,32,0,32,32,32);
+            g.addColorStop(0, 'rgba(255,255,255,1)');       
+            g.addColorStop(0.2, 'rgba(255,240,220,0.6)');   
+            g.addColorStop(0.5, 'rgba(255,255,255,0.05)');  
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle=g; ctx.fillRect(0,0,64,64);
+            return new THREE.CanvasTexture(c);
         }
 
-        // 关闭模态框
-        function hideModal() {
-            modal.classList.add('opacity-0', 'pointer-events-none', 'scale-95');
-            modal.classList.remove('opacity-100', 'pointer-events-auto', 'scale-100');
-        }
+        const P = { count: 85000, r: 55 };
+        let points;
+        
+        function initGalaxy() {
+            const geo = new THREE.BufferGeometry();
+            const pos=[], col=[], sz=[];
+            const cCore = new THREE.Color(0xffaa00);
+            const cMid1 = new THREE.Color(0xff0066);
+            const cMid2 = new THREE.Color(0x9900ff);
+            const cOut  = new THREE.Color(0x00ccff);
 
-        // 绑定团队卡片点击事件
-        document.querySelectorAll('.team-card').forEach(card => {
-            card.addEventListener('click', function() {
-                const memberId = this.getAttribute('data-id');
-                const member = teamMembers[memberId];
-                if (member) showModal(member);
-            });
-        });
-
-        // 关闭模态框（按钮和背景点击）
-        closeModal.addEventListener('click', hideModal);
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) hideModal();
-        });
-
-        // 移动端菜单
-        const mobileMenuBtn = document.getElementById('mobile-menu-btn');
-        const mobileMenu = document.getElementById('mobile-menu');
-        mobileMenuBtn.addEventListener('click', () => {
-            mobileMenu.classList.toggle('hidden');
-        });
-
-        // 初始化导航指示器
-        const navContainer = document.querySelector('#journal .relative');
-        const indicator = document.getElementById('navIndicator');
-
-        // 设置指示器初始位置
-        function updateIndicator() {
-            const activeBtn = document.querySelector('.journal-nav.bg-primary');
-            if (activeBtn) {
-                const rect = activeBtn.getBoundingClientRect();
-                const containerRect = navContainer.getBoundingClientRect();
-                indicator.style.width = `${rect.width + 12}px`; // 比按钮宽6px（左右各3px）
-                indicator.style.height = `${rect.height + 12}px`; // 比按钮高6px（上下各3px）
-                indicator.style.left = `${rect.left - containerRect.left - 6}px`; // 左偏移6px
-                indicator.style.top = `${rect.top - containerRect.top - 6}px`; // 上偏移6px
-            }
-        }
-
-        // 初始加载时设置
-        setTimeout(updateIndicator, 100);
-
-        // 窗口大小变化时更新
-        window.addEventListener('resize', updateIndicator);
-        // 日志导航切换
-        document.querySelectorAll('.journal-nav').forEach(nav => {
-            nav.addEventListener('click', function() {
-                const day = this.getAttribute('data-day');
-                document.querySelectorAll('.journal-nav').forEach(n => {
-                    n.classList.remove('bg-primary', 'text-white');
-                    n.classList.add('bg-white', 'text-primary', 'hover:bg-primary/10');
-                });
-                this.classList.add('bg-primary', 'text-white');
-                // 更新指示器位置
-                setTimeout(updateIndicator, 50); // 延迟确保按钮样式更新完成
-
-                const currentEntry = document.querySelector('.journal-entry:not(.hidden)');
-                const newEntry = document.querySelector(`.journal-entry[data-day="${day}"]`);
-
-                if (currentEntry) {
-                    currentEntry.classList.add('journal-fade-out');
-                    setTimeout(() => {
-                        currentEntry.classList.add('hidden');
-                        currentEntry.classList.remove('journal-fade-out');
-                        newEntry.classList.remove('hidden');
-                        newEntry.classList.add('journal-fade-in');
-                        setTimeout(() => {
-                            newEntry.classList.remove('journal-fade-in');
-                        }, 300);
-                    }, 300);
+            for(let i=0; i<P.count; i++) {
+                const isCore = Math.random() < 0.25;
+                let x,y,z, c;
+                if(isCore) {
+                    const r = Math.pow(Math.random(), 3) * 12;
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(Math.random()*2 - 1);
+                    x = r * Math.sin(phi) * Math.cos(theta);
+                    y = r * Math.sin(phi) * Math.sin(theta);
+                    z = r * Math.cos(phi);
+                    c = cCore.clone().lerp(new THREE.Color(0xffffff), Math.random()*0.3);
+                    sz.push(Math.random()*2.5 + 1.5); 
                 } else {
-                    newEntry.classList.remove('hidden');
+                    const r = Math.random()*P.r + 6;
+                    const spin = r * 0.8;
+                    const angle = (i % 4)/4 * Math.PI*2;
+                    const spread = r * 0.35;
+                    const rndX = (Math.random()-0.5)*spread;
+                    const rndY = (Math.random()-0.5)*spread*0.6;
+                    const rndZ = (Math.random()-0.5)*spread;
+                    x = Math.cos(angle+spin)*r + rndX;
+                    y = rndY * 2.0;
+                    z = Math.sin(angle+spin)*r + rndZ;
+                    const ratio = r/P.r;
+                    if(ratio < 0.4) c = cMid1.clone().lerp(cMid2, ratio*2.5);
+                    else c = cMid2.clone().lerp(cOut, (ratio-0.4)*1.6);
+                    sz.push(Math.random()*2);
                 }
-            });
-        });
-
-        // 导航栏滚动效果
-        window.addEventListener('scroll', () => {
-            const navbar = document.getElementById('navbar');
-            navbar.classList.toggle('bg-white', window.scrollY > 50);
-            navbar.classList.toggle('shadow-md', window.scrollY > 50);
-            navbar.classList.toggle('bg-white/90', window.scrollY <= 50);
-        });
-
-        // 性能图表
-        new Chart(document.getElementById('performanceChart'), {
-            type: 'radar',
-            data: {
-                labels: ['动力性能', '控制精度', '传感准确性', '结构稳定性', '续航能力', '安全性'],
-                datasets: [{
-                    label: '实际性能',
-                    data: [85, 90, 88, 92, 80, 95],
-                    backgroundColor: 'rgba(22, 93, 255, 0.2)',
-                    borderColor: 'rgba(22, 93, 255, 1)',
-                    pointBackgroundColor: 'rgba(22, 93, 255, 1)'
-                }, {
-                    label: '设计目标',
-                    data: [80, 85, 85, 90, 80, 90],
-                    backgroundColor: 'rgba(150, 150, 150, 0.2)',
-                    borderColor: 'rgba(150, 150, 150, 1)',
-                    pointBackgroundColor: 'rgba(150, 150, 150, 1)'
-                }]
-            },
-            options: {
-                scales: {
-                    r: { beginAtZero: true, max: 100 }
-                }
+                pos.push(x,y,z);
+                col.push(c.r, c.g, c.b);
             }
-        });
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+            geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3));
+            geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1));
+            
+            const mat = new THREE.ShaderMaterial({
+                uniforms: { tex: { value: createTex() } },
+                vertexShader: document.getElementById('vertexShader').textContent,
+                fragmentShader: document.getElementById('fragmentShader').textContent,
+                depthWrite: false, blending: THREE.AdditiveBlending, transparent: true, vertexColors: true
+            });
+            points = new THREE.Points(geo, mat);
+            scene.add(points);
+        }
+        initGalaxy();
 
-        // 回到顶部按钮
-        const backToTop = document.getElementById('back-to-top');
-        window.addEventListener('scroll', () => {
-            if (window.scrollY > 300) {
-                backToTop.classList.remove('hidden');
+        // 渲染循环
+        let cRotX=0, cRotY=0, cZoom=1;
+        let lastTime = 0;
+        let frameCount = 0;
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+            frameCount++;
+            if(time - lastTime >= 1000) {
+                UI.updateMonitor(frameCount, null);
+                frameCount = 0;
+                lastTime = time;
+            }
+
+            if(State.hasHand) {
+                State.tRotX = State.hRotX; State.tRotY = State.hRotY; State.tZoom = State.hZoom;
+                State.mRotX = State.hRotX; State.mRotY = State.hRotY; State.mZoom = State.hZoom;
+                points.rotation.y += 0.0002;
             } else {
-                backToTop.classList.add('hidden');
+                State.tRotX = State.mRotX; State.tRotY = State.mRotY; State.tZoom = State.mZoom;
+                points.rotation.y += 0.0006;
             }
-        });
-        backToTop.addEventListener('click', () => {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        });
 
-        // 平滑滚动
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function(e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    window.scrollTo({ top: target.offsetTop - 80, behavior: 'smooth' });
-                    if (!mobileMenu.classList.contains('hidden')) {
-                        mobileMenu.classList.add('hidden');
-                    }
-                }
-            });
-        });
+            cRotX += (State.tRotX - cRotX) * 0.08;
+            cRotY += (State.tRotY - cRotY) * 0.08;
+            cZoom += (State.tZoom - cZoom) * 0.08;
 
-        // 新增：日志内容展开/折叠功能
-        // 展开/折叠功能
-        document.querySelectorAll('.expand-trigger').forEach(trigger => {
-            trigger.addEventListener('click', function() {
-                const details = this.previousElementSibling;
-                const icon = this.querySelector('i');
+            const r = 45 * cZoom;
+            camera.position.x = r * Math.sin(cRotY) * Math.cos(cRotX);
+            camera.position.y = r * Math.sin(cRotX);
+            camera.position.z = r * Math.cos(cRotY) * Math.cos(cRotX);
+            camera.lookAt(0,0,0);
+
+            renderer.render(scene, camera);
+        }
+        animate(0);
+
+        // ================= 3. AI 网络 (Safari 修复版) =================
+        const Network = {
+            sources: [
+                { name: '阿里云 CDN', url: 'https://registry.npmmirror.com/@mediapipe/hands/0.4.1646424915/files/' },
+                { name: '镜像官方源', url: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' }
+            ],
+
+            async init() {
+                const elNet = document.getElementById('disp-net');
+                const elPing = document.getElementById('disp-ping');
+
+                let bestSrc = this.sources[0];
+                let minPing = 9999;
                 
-                // 切换内容显示状态
-                if (details.classList.contains('max-h-56')) {
-                    details.classList.remove('max-h-56');
-                    details.classList.add('max-h-1800');
-                    icon.classList.add('rotate-180');
-                } else {
-                    details.classList.remove('max-h-1800');
-                    details.classList.add('max-h-56');
-                    icon.classList.remove('rotate-180');
+                for(let src of this.sources) {
+                    const start = performance.now();
+                    try {
+                        await fetch(src.url + 'hands_solution_packed_assets_loader.js', {method:'HEAD'});
+                        const ping = Math.round(performance.now() - start);
+                        if(ping < minPing) { minPing = ping; bestSrc = src; }
+                    } catch(e) {}
                 }
-            });
-        });
-    });
-</script>
+
+                elNet.innerText = bestSrc.name;
+                elPing.innerText = minPing < 9999 ? minPing + " ms" : "超时";
+
+                try {
+                    const hands = new Hands({locateFile: f => bestSrc.url + f});
+                    hands.setOptions({
+                        maxNumHands: 1, modelComplexity: 0, 
+                        minDetectionConfidence: 0.4, minTrackingConfidence: 0.4
+                    });
+                    hands.onResults(this.onRes);
+
+                    const vid = document.getElementById('input_video');
+                    // ★★★ Safari 核心修复：移除 width/height 强制约束 ★★★
+                    const cam = new Camera(vid, {
+                        onFrame: async () => await hands.send({image: vid}),
+                        // width: 320,  <-- 已删除，防止 iOS 报错
+                        // height: 240, <-- 已删除，防止 iOS 报错
+                        facingMode: 'user'
+                    });
+                    await cam.start();
+                } catch(e) {
+                    elNet.innerText = "加载失败: " + e.name;
+                }
+            },
+
+            onRes(res) {
+                const elSrc = document.getElementById('disp-source');
+                const elVal = document.getElementById('disp-val');
+                
+                if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
+                    State.hasHand = true;
+                    elSrc.innerText = "AI 手势识别"; // 英文显示
+                    elSrc.className = "value accent";
+
+                    const lm = res.multiHandLandmarks[0];
+                    const x = (1 - lm[8].x) * 2 - 1;
+                    const y = -(lm[8].y * 2 - 1);
+                    State.hRotY = x * 2.5; State.hRotX = y * 1.5;
+
+                    const d = Math.hypot(lm[8].x - lm[0].x, lm[8].y - lm[0].y);
+                    elVal.innerText = d.toFixed(2); 
+
+                    if(d < 0.2) State.hZoom = 0.4;
+                    else if(d > 0.35) State.hZoom = 1.8;
+                    else State.hZoom = 1.0;
+                } else {
+                    State.hasHand = false;
+                    elSrc.innerText = "TOUCH / MOUSE";
+                    elSrc.className = "value inactive";
+                }
+            }
+        };
+
+        window.onload = UI.intro;
+        window.onresize = () => {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+    </script>
+</body>
+</html>
